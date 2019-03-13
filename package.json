@@ -1,0 +1,9 @@
+{
+  "name": "smooth-control",
+  "version": "0.0.0",
+  "description": "API for controlling Smooth Control motors (aka Quantum Drive & Hover Drive)",
+  "main": "api.js",
+  "repository": "https://github.com/cinderblock/smooth-control.git",
+  "author": "Cameron Tacklind <cameron@tacklind.com> (http://cameron.tacklind.com)",
+  "license": "MIT"
+}
