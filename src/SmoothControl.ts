@@ -78,19 +78,19 @@ export type Command =
 // Matches main.hpp State
 export enum ControllerState {
   Fault,
-  MLXSetup,
   Manual,
-  Calibration,
-  Push,
-  Servo,
+  Normal,
 }
 
 // Matches main.hpp Fault
 export enum ControllerFault {
   Init,
-  InvalidCommand,
+  UndervoltageLockout,
   OverCurrent,
   OverTemperature,
+  WatchdogReset,
+  BrownOutReset,
+  InvalidCommand,
 }
 
 export enum MlxResponseState {
