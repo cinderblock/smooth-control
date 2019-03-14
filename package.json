@@ -2,8 +2,29 @@
   "name": "smooth-control",
   "version": "0.0.0",
   "description": "API for controlling Smooth Control motors (aka Quantum Drive & Hover Drive)",
-  "main": "api.js",
+  "main": "dist/SmoothControl.js",
+  "types": "dist/SmoothControl.d.ts",
+  "files": [
+    "dist/utils/clipRange.js",
+    "dist/SmoothControl.js",
+    "dist/SmoothControl.d.ts"
+  ],
   "repository": "https://github.com/cinderblock/smooth-control.git",
   "author": "Cameron Tacklind <cameron@tacklind.com> (http://cameron.tacklind.com)",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^11.11.3",
+    "@types/usb": "^1.5.1",
+    "prettier": "^1.16.4",
+    "tslint": "^5.14.0",
+    "typescript": "^3.3.3333"
+  },
+  "dependencies": {
+    "mlx90363": "https://github.com/cinderblock/node-MLX90363.git",
+    "usb": "^1.5.0"
+  }
 }
