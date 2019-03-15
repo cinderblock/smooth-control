@@ -19,16 +19,22 @@ function isDeviceMotorDriver(device: usb.Device) {
   return ven == deviceVid && prod == devicePid;
 }
 
-// Matches PacketFormats.h CommandMode
-export enum CommandMode {
-  MLXDebug,
-  ThreePhase,
-  Calibration,
-  Push,
-  Servo,
+// Matches PacketFormats.h
+export declare enum CommandMode {
+  MLXDebug = 0,
+  ThreePhase = 1,
+  Calibration = 2,
+  Push = 3,
+  Servo = 4,
+  ClearFault = 5,
+  Bootloader = 0xfe,
 }
 
 export const Melexis = MLX;
+
+export type ClearFaultCommand = {
+  mode: CommandMode.ClearFault;
+};
 
 export type MLXCommand = {
   mode: CommandMode.MLXDebug;
@@ -69,6 +75,7 @@ export type ServoCommand = {
 };
 
 export type Command =
+  | ClearFaultCommand
   | MLXCommand
   | ThreePhaseCommand
   | CalibrationCommand
