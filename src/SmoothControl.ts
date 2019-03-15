@@ -20,7 +20,7 @@ function isDeviceMotorDriver(device: usb.Device) {
 }
 
 // Matches PacketFormats.h
-export declare enum CommandMode {
+export enum CommandMode {
   MLXDebug = 0,
   ThreePhase = 1,
   Calibration = 2,
