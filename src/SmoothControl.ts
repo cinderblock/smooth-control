@@ -9,9 +9,6 @@ import * as MLX from 'mlx90363';
 const deviceVid = 0xdead;
 const devicePid = 0xbeef;
 
-// Must match REPORT_SIZE
-const reportLength = 29;
-
 function isDeviceMotorDriver(device: usb.Device) {
   const dec = device.deviceDescriptor;
   const ven = dec.idVendor;
@@ -112,6 +109,9 @@ export enum MlxResponseState {
   Other,
 }
 
+// Must match REPORT_SIZE
+const reportLength = 33;
+
 export type ReadData = {
   state: ControllerState;
   fault: ControllerFault;
@@ -130,6 +130,8 @@ export type ReadData = {
   mlxResponse?: Buffer;
   mlxResponseState?: MlxResponseState;
   mlxParsedResponse?: ReturnType<typeof MLX.parseData>;
+  mlxCRCFailures: number;
+  controlLoops: number;
 };
 
 // interface Events {
@@ -212,43 +214,37 @@ export function parseINBuffer(data: Buffer): ReadData {
 
   const mlxResponse = readBuffer(8);
   const mlxResponseState = read(1);
+  const controlLoops = read(2);
+  const mlxCRCFailures = read(2);
 
   // Top bit specifies if controller thinks it is calibrated
   const calibrated = !!(statusBitsWord & (1 << 15));
   const mlxDataValid = !!(statusBitsWord & (1 << 14));
 
-  return mlxDataValid
-    ? {
-        state,
-        fault,
-        position,
-        velocity,
-        statusBitsWord,
-        calibrated,
-        cpuTemp,
-        current,
-        ain0,
-        AS,
-        BS,
-        CS,
-        mlxResponse,
-        mlxResponseState,
-        mlxParsedResponse: MLX.parseData(mlxResponse),
-      }
-    : {
-        state,
-        fault,
-        position,
-        velocity,
-        statusBitsWord,
-        calibrated,
-        cpuTemp,
-        current,
-        ain0,
-        AS,
-        BS,
-        CS,
-      };
+  const ret: ReadData = {
+    state,
+    fault,
+    position,
+    velocity,
+    statusBitsWord,
+    calibrated,
+    cpuTemp,
+    current,
+    ain0,
+    AS,
+    BS,
+    CS,
+    controlLoops,
+    mlxCRCFailures,
+  };
+
+  if (mlxDataValid) {
+    ret.mlxResponse = mlxResponse;
+    ret.mlxResponseState = mlxResponseState;
+    ret.mlxParsedResponse = MLX.parseData(mlxResponse);
+  }
+
+  return ret;
 }
 
 export async function addAttachListener(
