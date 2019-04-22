@@ -129,7 +129,7 @@ export type ReadData = {
   CS: number;
   mlxResponse?: Buffer;
   mlxResponseState?: MlxResponseState;
-  mlxParsedResponse?: ReturnType<typeof MLX.parseData>;
+  mlxParsedResponse?: ReturnType<typeof parseMLX>;
   mlxCRCFailures: number;
   controlLoops: number;
 };
@@ -179,6 +179,16 @@ type Options = {
     | DebugFunction
     | { warning?: DebugFunction; info?: DebugFunction; debug?: DebugFunction };
 };
+
+function parseMLX(
+  mlxResponse: Buffer
+): ReturnType<typeof MLX.parseData> | string {
+  try {
+    return MLX.parseData(mlxResponse);
+  } catch (e) {
+    return e.toString();
+  }
+}
 
 export function parseINBuffer(data: Buffer): ReadData {
   if (data.length != reportLength) {
@@ -241,7 +251,7 @@ export function parseINBuffer(data: Buffer): ReadData {
   if (mlxDataValid) {
     ret.mlxResponse = mlxResponse;
     ret.mlxResponseState = mlxResponseState;
-    ret.mlxParsedResponse = MLX.parseData(mlxResponse);
+    ret.mlxParsedResponse = parseMLX(mlxResponse);
   }
 
   return ret;
