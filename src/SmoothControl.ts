@@ -262,8 +262,8 @@ export async function addAttachListener(
 ) {
   async function checker(dev: usb.Device) {
     const serial = await openAndGetMotorSerial(dev);
-    dev.close();
     if (serial === false) return;
+    dev.close();
     listener(serial, dev);
   }
 
