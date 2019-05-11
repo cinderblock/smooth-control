@@ -191,9 +191,8 @@ function parseMLX(
 }
 
 export function parseINBuffer(data: Buffer): ReadData {
-  if (data.length != reportLength) {
-    throw 'Invalid data';
-  }
+  if (data.length != reportLength)
+    throw new Error('Invalid data. Refusing to parse');
 
   let i = 0;
   function read(length: number, signed: boolean = false) {
@@ -472,9 +471,10 @@ export default function USBInterface(id: string, options?: Options) {
     try {
       switch (command.mode) {
         case CommandMode.MLXDebug:
-          if (command.data === undefined) throw 'Argument `data` missing';
+          if (command.data === undefined)
+            throw new Error('Argument `data` missing');
           if (!(command.data.length == 7 || command.data.length == 8))
-            throw 'Argument `data` has incorrect length';
+            throw new Error('Argument `data` has incorrect length');
 
           command.data.copy(writeBuffer, pos);
           pos += 8;
@@ -483,9 +483,9 @@ export default function USBInterface(id: string, options?: Options) {
           break;
 
         case CommandMode.ThreePhase:
-          if (command.A === undefined) throw 'Argument `A` missing';
-          if (command.B === undefined) throw 'Argument `B` missing';
-          if (command.C === undefined) throw 'Argument `C` missing';
+          if (command.A === undefined) throw new Error('Argument `A` missing');
+          if (command.B === undefined) throw new Error('Argument `B` missing');
+          if (command.C === undefined) throw new Error('Argument `C` missing');
 
           writeNumBuffer(command.A, 2);
           writeNumBuffer(command.B, 2);
@@ -493,22 +493,26 @@ export default function USBInterface(id: string, options?: Options) {
           break;
 
         case CommandMode.Calibration:
-          if (command.angle === undefined) throw 'Argument `angle` missing';
+          if (command.angle === undefined)
+            throw new Error('Argument `angle` missing');
           if (command.amplitude === undefined)
-            throw 'Argument `amplitude` missing';
+            throw new Error('Argument `amplitude` missing');
 
           writeNumBuffer(command.angle, 2);
           writeNumBuffer(command.amplitude, 1);
           break;
 
         case CommandMode.Push:
-          if (command.command === undefined) throw 'Argument `command` missing';
+          if (command.command === undefined)
+            throw new Error('Argument `command` missing');
           writeNumBuffer(command.command, 2, true);
           break;
 
         case CommandMode.Servo:
-          if (command.command === undefined) throw 'Argument `command` missing';
-          if (command.pwmMode === undefined) throw 'Argument `pwmMode` missing';
+          if (command.command === undefined)
+            throw new Error('Argument `command` missing');
+          if (command.pwmMode === undefined)
+            throw new Error('Argument `pwmMode` missing');
 
           // CommandMode::Servo
           const PWMMode = {
