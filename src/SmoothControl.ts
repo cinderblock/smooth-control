@@ -1,10 +1,10 @@
 import EventEmitter from 'events';
 import { promisify } from 'util';
 import usb, { InEndpoint } from 'usb';
-// import StrictEventEmitter from './strict-event-emitter-types';
-
-import clipRange from './utils/clipRange';
 import * as MLX from 'mlx90363';
+import TypedEventEmitter from 'typed-emitter';
+import clipRange from './utils/clipRange';
+import DebugFunctions, { DebugOptions } from './utils/Debug';
 
 const deviceVid = 0xdead;
 const devicePid = 0xbeef;
@@ -27,6 +27,7 @@ export enum CommandMode {
   Bootloader = 0xfe,
 }
 
+// Make melexis sub module easily accessible to others
 export const Melexis = MLX;
 
 export type ClearFaultCommand = {
@@ -134,13 +135,25 @@ export type ReadData = {
   controlLoops: number;
 };
 
+interface Events {
+  status: (status: 'missing' | 'connected') => void;
+  data: (data: ReadData) => void;
+  error: (err: usb.LibUSBException) => void;
+}
+
 // interface Events {
 //   data(arg: ReadData): void;
 //   error(): Error;
-//   status(): 'ok'|'missing';
+//   status(): 'connected'|'missing';
 // }
 
-async function openAndGetMotorSerial(dev: usb.Device) {
+/**
+ * If this device is not a SmoothControl motor, do not even open it and return false.
+ *
+ * Otherwise read the serial number from the device and return a closed device.
+ * @param dev USB Device to check
+ */
+async function getMotorSerial(dev: usb.Device) {
   if (!isDeviceMotorDriver(dev)) return false;
 
   // console.log('New Motor Device!');
@@ -165,19 +178,18 @@ async function openAndGetMotorSerial(dev: usb.Device) {
 
     // console.log('Found Motor device:', dataStr);
 
+    dev.close();
     return dataStr;
   } catch (e) {
     console.log('ERROR reading serial number', e);
   }
+  dev.close();
   return false;
 }
 
-type DebugFunction = boolean | ((...args: any[]) => void);
-
 type Options = {
-  debug?:
-    | DebugFunction
-    | { warning?: DebugFunction; info?: DebugFunction; debug?: DebugFunction };
+  debug?: DebugOptions;
+  polling?: number | boolean;
 };
 
 function parseMLX(
@@ -190,7 +202,12 @@ function parseMLX(
   }
 }
 
-export function parseINBuffer(data: Buffer): ReadData {
+/**
+ * Parse block of bytes from motor into logical object
+ *
+ * @param data Raw block of bytes from a motor packet
+ */
+export function parseHostDataIN(data: Buffer): ReadData {
   if (data.length != reportLength)
     throw new Error('Invalid data. Refusing to parse');
 
@@ -256,95 +273,110 @@ export function parseINBuffer(data: Buffer): ReadData {
   return ret;
 }
 
-export async function addAttachListener(
-  listener: (id: string, device: usb.Device) => void
-) {
-  async function checker(dev: usb.Device) {
-    const serial = await openAndGetMotorSerial(dev);
-    if (serial === false) return;
-    dev.close();
-    listener(serial, dev);
-  }
-
-  const checkExisting = Promise.all(usb.getDeviceList().map(checker));
-
-  usb.on('attach', checker);
-
-  await checkExisting;
-
-  return () => {
-    usb.removeListener('attach', checker);
-  };
+interface Consumer {
+  attach: (device: usb.Device) => void;
+  detach: () => void;
 }
 
-export default function USBInterface(id: string, options?: Options) {
-  if (!id) throw new Error('Invalid ID');
+/**
+ * List of motors connected to host
+ */
+const motors: {
+  serial: string;
+  device?: usb.Device;
+  consumer?: Consumer;
+}[] = [];
+
+/**
+ * Call a function whenever a motor is connected to the computer
+ * @param listener Function to call every time any motor device is connected
+ * @returns A cleanup function to stop listening.
+ */
+export async function addAttachListener(listener: (serial: string) => void) {
+  // TODO: re-implement with new device watcher
+  console.log('Warning: Using de-implemented feature that will come back');
+
+  return () => {};
+}
+
+/**
+ * Check a USB device
+ * @param device USB device instance to check if it is one of us
+ */
+async function onDeviceAttach(device: usb.Device) {
+  const serial = await getMotorSerial(device);
+
+  if (!serial) return;
+
+  const found = motors.find(d => serial == d.serial);
+
+  if (!found) motors.push({ serial, device });
+  else if (found.consumer) found.consumer.attach(device);
+}
+
+let started = false;
+/**
+ * Start actually looking for and attaching to devices
+ */
+export function start(options: { log?: DebugOptions } = {}) {
+  const { info, warning } = DebugFunctions(options.log);
+  info('Started watching for USB devices');
+  // Ensure we only start searching for devices once
+  if (started) {
+    warning('Started again. Ignoring');
+    return;
+  }
+  started = true;
+
+  // When we start, find all devices
+  usb.getDeviceList().forEach(onDeviceAttach);
+  // And listen for any new devices connected
+  usb.on('attach', onDeviceAttach);
+
+  usb.on('detach', dev => {
+    const found = motors.find(({ device }) => device == dev);
+    if (found && found.consumer) found.consumer.detach();
+  });
+}
+
+/**
+ * Manages a single motor connection (and reconnection). Won't do anything until `start` is called.
+ * @param serial Serial number of motor to find
+ * @param options
+ */
+export default function USBInterface(serial: string, options?: Options) {
+  if (!serial) throw new Error('Invalid ID');
+
+  const found = motors.find(d => serial == d.serial);
+  if (found) {
+    if (found.consumer) {
+      throw new Error(
+        "Can't have two consumers of the same serial number: " + serial
+      );
+    } else {
+      found.consumer = { attach, detach };
+    }
+  } else {
+    motors.push({ serial, consumer: { attach, detach } });
+  }
 
   options = options || {};
 
-  // Default to enabled
-  if (options.debug === undefined) options.debug = true;
+  const polling =
+    (options.polling === undefined || options.polling === true
+      ? 3
+      : options.polling) || 0;
 
-  function warning(...args: any[]) {
-    if (!options || !options.debug) return;
+  const { info, debug, warning } = DebugFunctions(options.debug);
 
-    if (typeof options.debug == 'function') {
-      options.debug('warning', ...args);
-    } else if (options.debug === true || options.debug.warning === true) {
-      console.log('Smooth Control - Warning:', ...args);
-    } else if (options.debug.warning) {
-      options.debug.warning(...args);
-    }
-  }
-
-  function info(...args: any[]) {
-    if (!options || !options.debug) return;
-
-    if (typeof options.debug == 'function') {
-      options.debug('info', ...args);
-    } else if (options.debug === true || options.debug.info === true) {
-      console.log('Smooth Control - info:', ...args);
-    } else if (options.debug.info) {
-      options.debug.info(...args);
-    }
-  }
-
-  function debug(...args: any[]) {
-    if (!options || !options.debug) return;
-
-    if (typeof options.debug == 'function') {
-      options.debug('debug', ...args);
-    } else if (options.debug === true || options.debug.debug === true) {
-      console.log('Smooth Control - debug:', ...args);
-    } else if (options.debug.debug) {
-      options.debug.debug(...args);
-    }
-  }
-
-  let device: usb.Device;
+  let device: usb.Device | undefined;
   let endpoint: usb.InEndpoint;
-  const events = new EventEmitter(); // as StrictEventEmitter<EventEmitter, Events>;
-  let enabled = false;
+  const events = new EventEmitter() as TypedEventEmitter<Events>;
 
-  let polling = true;
+  async function attach(dev: usb.Device) {
+    info('Attaching', serial);
 
-  function start(p = true) {
-    polling = p;
-    // When we start, find all devices
-    usb.getDeviceList().forEach(checkDevice);
-    // And listen for any new devices connected
-    usb.on('attach', checkDevice);
-  }
-
-  async function checkDevice(dev: usb.Device) {
-    const serial = await openAndGetMotorSerial(dev);
-    if (serial != id) {
-      dev.close();
-      return;
-    }
-    info('Attaching', id);
-
-    usb.removeListener('attach', checkDevice);
+    dev.open();
 
     device = dev;
 
@@ -364,9 +396,9 @@ export default function USBInterface(id: string, options?: Options) {
 
     if (polling) {
       // Start polling. 3 pending requests at all times
-      endpoint.startPoll(3, reportLength);
+      endpoint.startPoll(polling, reportLength);
 
-      endpoint.on('data', d => events.emit('data', parseINBuffer(d)));
+      endpoint.on('data', d => events.emit('data', parseHostDataIN(d)));
     }
 
     endpoint.on('error', err => {
@@ -375,13 +407,9 @@ export default function USBInterface(id: string, options?: Options) {
       events.emit('error', err);
     });
 
-    usb.on('detach', detach);
+    events.emit('status', 'connected');
 
-    enabled = true;
-
-    events.emit('status', 'ok');
-
-    info('Attached', id);
+    info('Attached', serial);
 
     // Sample set configuration (not needed for our simple device)
     // hidDevice.controlTransfer(
@@ -410,30 +438,23 @@ export default function USBInterface(id: string, options?: Options) {
   function close() {
     if (!device) return;
 
-    function cl() {
-      device.close();
-    }
+    const dev = device;
 
-    if (polling) endpoint.stopPoll(cl);
-    else cl();
+    if (!polling) dev.close();
+    else endpoint.stopPoll(dev.close);
   }
 
-  function detach(dev: usb.Device) {
-    if (dev != device) return;
-
+  function detach() {
     events.emit('status', 'missing');
 
-    info('Detach', id);
+    info('Detach', serial);
 
-    usb.removeListener('detach', detach);
-    usb.on('attach', checkDevice);
-
-    enabled = false;
+    device = undefined;
   }
 
   async function read() {
-    if (!enabled || !device) {
-      warning('USBInterface not enabled when trying to read', id);
+    if (!device) {
+      warning('Trying to read with no motor attached.', serial);
       return false;
     }
 
@@ -446,7 +467,7 @@ export default function USBInterface(id: string, options?: Options) {
         ) {
           warning('Rejected trying to receive.', data);
           reject(err);
-        } else resolve(parseINBuffer(data));
+        } else resolve(parseHostDataIN(data));
       });
     });
   }
@@ -455,18 +476,17 @@ export default function USBInterface(id: string, options?: Options) {
    * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
    */
   function write(command: Command, cb?: () => any) {
-    if (!enabled || !device) {
-      warning('USBInterface not enabled when trying to write', command, id);
+    if (!device) {
+      warning('Trying to write with no motor attached.', serial, command);
       return false;
     }
 
     let pos = 1;
-    function writeNumBuffer(num: number, len = 1, signed = false) {
-      if (signed) pos = writeBuffer.writeIntLE(num, pos, len);
-      else pos = writeBuffer.writeUIntLE(num, pos, len);
+    function writeNumberToBuffer(num: number, len = 1, signed = false) {
+      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](num, pos, len);
     }
 
-    writeNumBuffer(command.mode);
+    writeNumberToBuffer(command.mode);
 
     try {
       switch (command.mode) {
@@ -479,7 +499,7 @@ export default function USBInterface(id: string, options?: Options) {
           command.data.copy(writeBuffer, pos);
           pos += 8;
           const generateCRC = command.crc || command.data.length == 7;
-          writeNumBuffer(generateCRC ? 1 : 0);
+          writeNumberToBuffer(generateCRC ? 1 : 0);
           break;
 
         case CommandMode.ThreePhase:
@@ -487,9 +507,9 @@ export default function USBInterface(id: string, options?: Options) {
           if (command.B === undefined) throw new Error('Argument `B` missing');
           if (command.C === undefined) throw new Error('Argument `C` missing');
 
-          writeNumBuffer(command.A, 2);
-          writeNumBuffer(command.B, 2);
-          writeNumBuffer(command.C, 2);
+          writeNumberToBuffer(command.A, 2);
+          writeNumberToBuffer(command.B, 2);
+          writeNumberToBuffer(command.C, 2);
           break;
 
         case CommandMode.Calibration:
@@ -498,14 +518,14 @@ export default function USBInterface(id: string, options?: Options) {
           if (command.amplitude === undefined)
             throw new Error('Argument `amplitude` missing');
 
-          writeNumBuffer(command.angle, 2);
-          writeNumBuffer(command.amplitude, 1);
+          writeNumberToBuffer(command.angle, 2);
+          writeNumberToBuffer(command.amplitude, 1);
           break;
 
         case CommandMode.Push:
           if (command.command === undefined)
             throw new Error('Argument `command` missing');
-          writeNumBuffer(command.command, 2, true);
+          writeNumberToBuffer(command.command, 2, true);
           break;
 
         case CommandMode.Servo:
@@ -528,7 +548,7 @@ export default function USBInterface(id: string, options?: Options) {
             kD: 13,
           };
 
-          writeNumBuffer(PWMMode[command.pwmMode]);
+          writeNumberToBuffer(PWMMode[command.pwmMode]);
 
           switch (command.pwmMode) {
             case 'kP': // case 11: in USBInterface.cpp, send a Proportional Gain constant
@@ -541,7 +561,7 @@ export default function USBInterface(id: string, options?: Options) {
             case 'position': // case 2: setPosition
             case 'velocity': // case 3: setVelocity
             case 'spare': // case 4: Set Spare Mode
-              writeNumBuffer(command.command, 4, true);
+              writeNumberToBuffer(command.command, 4, true);
               break;
           }
       }
@@ -566,7 +586,7 @@ export default function USBInterface(id: string, options?: Options) {
         }
       );
     } catch (e) {
-      warning('Failure trying to send data', command, id, e);
+      warning('Failure trying to send data', command, serial, e);
       cb && cb();
     }
   }
