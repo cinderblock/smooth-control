@@ -311,7 +311,12 @@ async function onDeviceAttach(device: usb.Device) {
   const found = motors.find(d => serial == d.serial);
 
   if (!found) motors.push({ serial, device });
-  else if (found.consumer) found.consumer.attach(device);
+  else {
+    found.device = device;
+    if (found.consumer) {
+      found.consumer.attach(device);
+    }
+  }
 }
 
 let started = false;
@@ -335,7 +340,13 @@ export function start(options: { log?: DebugOptions } = {}) {
 
   usb.on('detach', dev => {
     const found = motors.find(({ device }) => device == dev);
-    if (found && found.consumer) found.consumer.detach();
+
+    if (found) {
+      found.device = undefined;
+      if (found.consumer) {
+        found.consumer.detach();
+      }
+    }
   });
 }
 
