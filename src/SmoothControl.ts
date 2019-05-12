@@ -1,5 +1,4 @@
 import EventEmitter from 'events';
-import { promisify } from 'util';
 import usb, { InEndpoint } from 'usb';
 import * as MLX from 'mlx90363';
 import TypedEventEmitter from 'typed-emitter';
@@ -160,12 +159,13 @@ async function getMotorSerial(dev: usb.Device) {
 
   dev.open();
 
-  const p = promisify(dev.getStringDescriptor.bind(dev)) as (
-    i: number
-  ) => Promise<Buffer | undefined>;
-
   try {
-    let data = await p(dev.deviceDescriptor.iSerialNumber);
+    const data = await new Promise<Buffer | undefined>((resolve, reject) =>
+      dev.getStringDescriptor(
+        dev.deviceDescriptor.iSerialNumber,
+        (err, result) => (err && reject(err)) || resolve(result)
+      )
+    );
 
     if (!data) {
       dev.close();
