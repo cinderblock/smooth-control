@@ -486,11 +486,13 @@ export default function USBInterface(serial: string, options?: Options) {
   /*
    * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
    */
-  function write(command: Command, cb?: () => any) {
+  async function write(command: Command, cb?: () => any) {
     if (!device) {
       warning('Trying to write with no motor attached.', serial, command);
       return false;
     }
+
+    const dev = device;
 
     let pos = 1;
     function writeNumberToBuffer(num: number, len = 1, signed = false) {
@@ -578,28 +580,33 @@ export default function USBInterface(serial: string, options?: Options) {
       }
 
       // Send a Set Report control request
-      device.controlTransfer(
-        // bmRequestType (constant for this control request)
-        usb.LIBUSB_RECIPIENT_INTERFACE |
-          usb.LIBUSB_REQUEST_TYPE_CLASS |
-          usb.LIBUSB_ENDPOINT_OUT,
-        // bmRequest (constant for this control request)
-        0x09,
-        // wValue (MSB is report type, LSB is report number)
-        0x0809,
-        // wIndex (interface number)
-        0,
-        // message to be sent
-        writeBuffer,
-        err => {
-          if (err && err.errno != 4) events.emit('error', err);
-          cb && cb();
-        }
+      await new Promise((resolve, reject) =>
+        dev.controlTransfer(
+          // bmRequestType (constant for this control request)
+          usb.LIBUSB_RECIPIENT_INTERFACE |
+            usb.LIBUSB_REQUEST_TYPE_CLASS |
+            usb.LIBUSB_ENDPOINT_OUT,
+          // bmRequest (constant for this control request)
+          0x09,
+          // wValue (MSB is report type, LSB is report number)
+          0x0809,
+          // wIndex (interface number)
+          0,
+          // message to be sent
+          writeBuffer,
+          err => {
+            if (err && err.errno != 4) {
+              events.emit('error', err);
+              // reject(err);
+            }
+            resolve();
+          }
+        )
       );
     } catch (e) {
       warning('Failure trying to send data', command, serial, e);
-      cb && cb();
     }
+    cb && cb();
   }
   return { events, write, read, start, close };
 }
