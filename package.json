@@ -6,6 +6,8 @@
   "types": "dist/SmoothControl.d.ts",
   "files": [
     "dist/utils/clipRange.js",
+    "dist/utils/Debug.js",
+    "dist/utils/Debug.d.ts",
     "dist/SmoothControl.js",
     "dist/SmoothControl.d.ts"
   ],
