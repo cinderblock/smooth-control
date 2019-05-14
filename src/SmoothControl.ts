@@ -287,16 +287,29 @@ const motors: {
   consumer?: Consumer;
 }[] = [];
 
+type Listener = (
+  serial: string,
+  device: usb.Device,
+  duplicate: boolean,
+  consumer?: Consumer
+) => void;
+const listeners: Listener[] = [];
+
 /**
  * Call a function whenever a motor is connected to the computer
  * @param listener Function to call every time any motor device is connected
  * @returns A cleanup function to stop listening.
  */
-export async function addAttachListener(listener: (serial: string) => void) {
-  // TODO: re-implement with new device watcher
-  console.log('Warning: Using de-implemented feature that will come back');
+export async function addAttachListener(listener: Listener) {
+  listeners.push(listener);
+  motors
+    .filter(m => m.device)
+    .forEach(m => listener(m.serial, m.device!, false));
 
-  return () => {};
+  return () => {
+    const index = listeners.indexOf(listener);
+    if (index >= 0) listeners.splice(index, 1);
+  };
 }
 
 /**
