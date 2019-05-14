@@ -586,15 +586,17 @@ export default function USBInterface(serial: string, options?: Options) {
           };
 
           writeNumberToBuffer(PWMMode[command.pwmMode]);
-
+          let skip = false;
           switch (command.pwmMode) {
             case 'kP': // case 11: in USBInterface.cpp, send a Proportional Gain constant
             case 'kI': // case 12:
             case 'kD': // case 13:
-              command.command = clipRange(0, 255)(command.command);
+              command.command = clipRange(0, 0xffff)(command.command);
+              skip = true;
             case 'pwm': // case 1: Set pwm Mode
             case 'command': // case 1: setAmplitude  // this is redundant to pwmMode
-              command.command = clipRange(-255, 255)(command.command);
+              if (!skip)
+                command.command = clipRange(-255, 255)(command.command);
             case 'position': // case 2: setPosition
             case 'velocity': // case 3: setVelocity
             case 'spare': // case 4: Set Spare Mode
