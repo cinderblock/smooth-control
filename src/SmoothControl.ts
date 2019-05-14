@@ -503,7 +503,11 @@ export default function USBInterface(serial: string, options?: Options) {
 
     let pos = 1;
     function writeNumberToBuffer(num: number, len = 1, signed = false) {
-      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](num, pos, len);
+      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](
+        Math.round(num),
+        pos,
+        len
+      );
     }
 
     writeNumberToBuffer(command.mode);
