@@ -310,12 +310,19 @@ async function onDeviceAttach(device: usb.Device) {
 
   const found = motors.find(d => serial == d.serial);
 
-  if (!found) motors.push({ serial, device });
-  else {
+  if (!found) {
+    // First time attach of a motor / no one looking for it
+    motors.push({ serial, device });
+  } else if (!found.device) {
+    // No device holding this spot
     found.device = device;
+
+    // Let our consumer know
     if (found.consumer) {
       found.consumer.attach(device);
     }
+  } else {
+    // Don't do anything
   }
 }
 
