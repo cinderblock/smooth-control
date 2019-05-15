@@ -312,7 +312,7 @@ export async function addAttachListener(listener: Listener) {
   listeners.push(listener);
   motors
     .filter(m => m.device)
-    .forEach(m => listener(m.serial, m.device!, false));
+    .forEach(m => listener(m.serial, m.device!, false, m.consumer));
 
   return () => {
     const index = listeners.indexOf(listener);
