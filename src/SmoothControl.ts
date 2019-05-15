@@ -110,20 +110,23 @@ export enum MlxResponseState {
 }
 
 // Must match REPORT_SIZE
-const reportLength = 33;
+const reportLength = 37;
 
 export type ReadData = {
   state: ControllerState;
   fault: ControllerFault;
   position: number;
   velocity: number;
-  // Store full word. Get the low 14 bits as actual raw angle
-  statusBitsWord: number;
-  // Top bit specifies if controller thinks it is calibrated
+  amplitude: number;
+  /**
+   * Raw bits of a "status word". Other values have parsed version of this.
+   */
+  statusBitsRaw: number;
   calibrated: boolean;
   cpuTemp: number;
   current: number;
-  ain0: number;
+  vBatt: number;
+  VDD: number;
   AS: number;
   BS: number;
   CS: number;
@@ -230,10 +233,13 @@ export function parseHostDataIN(data: Buffer): ReadData {
   const position = read(2);
   const velocity = read(2, true);
   // Store full word. Get the low 14 bits as actual raw angle
-  const statusBitsWord = read(2);
+  const statusBitsRaw = read(2);
   const cpuTemp = read(2);
   const current = read(2, true);
-  const ain0 = read(2);
+  const VDD = read(2);
+  const vBatt = read(2);
+  const forward = !!read(1);
+  const amplitude = (forward ? 1 : -1) * read(1);
   const AS = read(2);
   const BS = read(2);
   const CS = read(2);
@@ -244,19 +250,21 @@ export function parseHostDataIN(data: Buffer): ReadData {
   const mlxCRCFailures = read(2);
 
   // Top bit specifies if controller thinks it is calibrated
-  const calibrated = !!(statusBitsWord & (1 << 15));
-  const mlxDataValid = !!(statusBitsWord & (1 << 14));
+  const calibrated = !!(statusBitsRaw & (1 << 15));
+  const mlxDataValid = !!(statusBitsRaw & (1 << 14));
 
   const ret: ReadData = {
     state,
     fault,
     position,
     velocity,
-    statusBitsWord,
+    amplitude,
+    statusBitsRaw,
     calibrated,
     cpuTemp,
     current,
-    ain0,
+    vBatt,
+    VDD,
     AS,
     BS,
     CS,
