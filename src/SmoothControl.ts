@@ -330,6 +330,8 @@ async function onDeviceAttach(device: usb.Device) {
   if (!serial) return;
 
   const found = motors.find(d => serial == d.serial);
+  let consumer: Consumer;
+  let duplicate = false;
 
   if (!found) {
     // First time attach of a motor / no one looking for it
@@ -340,11 +342,15 @@ async function onDeviceAttach(device: usb.Device) {
 
     // Let our consumer know
     if (found.consumer) {
+      consumer = found.consumer;
       found.consumer.attach(device);
     }
   } else {
+    duplicate = true;
     // Don't do anything
   }
+
+  listeners.forEach(l => l(serial, device, duplicate, consumer));
 }
 
 let started = false;
