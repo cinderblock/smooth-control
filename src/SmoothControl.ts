@@ -418,6 +418,8 @@ export default function USBInterface(serial: string, options?: Options) {
   let endpoint: usb.InEndpoint;
   const events = new EventEmitter() as TypedEventEmitter<Events>;
 
+  let status: 'missing' | 'connected';
+
   async function attach(dev: usb.Device) {
     info('Attaching', serial);
 
@@ -452,7 +454,7 @@ export default function USBInterface(serial: string, options?: Options) {
       events.emit('error', err);
     });
 
-    events.emit('status', 'connected');
+    events.emit('status', (status = 'connected'));
 
     info('Attached', serial);
 
@@ -490,7 +492,7 @@ export default function USBInterface(serial: string, options?: Options) {
   }
 
   function detach() {
-    events.emit('status', 'missing');
+    events.emit('status', (status = 'missing'));
 
     info('Detach', serial);
 
@@ -648,5 +650,27 @@ export default function USBInterface(serial: string, options?: Options) {
     }
     cb && cb();
   }
-  return { events, write, read, start, close };
+
+  function onStatus(handler: (status: 'missing' | 'connected') => void) {
+    events.on('status', handler);
+    handler(status);
+    return () => {
+      events.removeListener('status', handler);
+    };
+  }
+
+  function onData(handler: (data: ReadData) => void) {
+    events.on('data', handler);
+    return () => {
+      events.removeListener('data', handler);
+    };
+  }
+  function onError(handler: (err: usb.LibUSBException) => void) {
+    events.on('error', handler);
+    return () => {
+      events.removeListener('error', handler);
+    };
+  }
+
+  return { onStatus, onData, onError, write, read, start, close };
 }
