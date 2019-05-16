@@ -143,12 +143,6 @@ interface Events {
   error: (err: usb.LibUSBException) => void;
 }
 
-// interface Events {
-//   data(arg: ReadData): void;
-//   error(): Error;
-//   status(): 'connected'|'missing';
-// }
-
 /**
  * If this device is not a SmoothControl motor, do not even open it and return false.
  *
