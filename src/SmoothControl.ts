@@ -648,7 +648,7 @@ export default function USBInterface(serial: string, options?: Options) {
 
   function onStatus(handler: (status: 'missing' | 'connected') => void) {
     events.on('status', handler);
-    handler(status);
+    setImmediate(() => handler(status));
     return () => {
       events.removeListener('status', handler);
     };
