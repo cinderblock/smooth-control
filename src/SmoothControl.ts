@@ -386,19 +386,6 @@ export function start(options: { log?: DebugOptions } = {}) {
 export default function USBInterface(serial: string, options?: Options) {
   if (!serial) throw new Error('Invalid ID');
 
-  const found = motors.find(d => serial == d.serial);
-  if (found) {
-    if (found.consumer) {
-      throw new Error(
-        "Can't have two consumers of the same serial number: " + serial
-      );
-    } else {
-      found.consumer = { attach, detach };
-    }
-  } else {
-    motors.push({ serial, consumer: { attach, detach } });
-  }
-
   options = options || {};
 
   const polling =
@@ -413,6 +400,22 @@ export default function USBInterface(serial: string, options?: Options) {
   const events = new EventEmitter() as TypedEventEmitter<Events>;
 
   let status: 'missing' | 'connected';
+
+  // Allocate a write buffer once and keep reusing it
+  const writeBuffer = Buffer.alloc(reportLength);
+
+  const found = motors.find(d => serial == d.serial);
+  if (found) {
+    if (found.consumer) {
+      throw new Error(
+        "Can't have two consumers of the same serial number: " + serial
+      );
+    } else {
+      found.consumer = { attach, detach };
+    }
+  } else {
+    motors.push({ serial, consumer: { attach, detach } });
+  }
 
   async function attach(dev: usb.Device) {
     info('Attaching', serial);
@@ -472,9 +475,6 @@ export default function USBInterface(serial: string, options?: Options) {
     //   }
     // );
   }
-
-  // Allocate a write buffer once and keep reusing it
-  const writeBuffer = Buffer.alloc(reportLength);
 
   function close() {
     if (!device) return;
