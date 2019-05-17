@@ -412,6 +412,7 @@ export default function USBInterface(serial: string, options?: Options) {
       );
     } else {
       found.consumer = { attach, detach };
+      if (found.device) attach(found.device);
     }
   } else {
     motors.push({ serial, consumer: { attach, detach } });
