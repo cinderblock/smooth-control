@@ -71,13 +71,18 @@ export type ServoCommand = {
     | 'kD';
 };
 
+export type BootloaderCommand = {
+  mode: CommandMode.Bootloader;
+};
+
 export type Command =
   | ClearFaultCommand
   | MLXCommand
   | ThreePhaseCommand
   | CalibrationCommand
   | PushCommand
-  | ServoCommand;
+  | ServoCommand
+  | BootloaderCommand;
 
 // Matches main.hpp State
 export enum ControllerState {
