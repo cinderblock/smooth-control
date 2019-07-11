@@ -337,12 +337,28 @@ export async function addAttachListener(listener: Listener) {
   };
 }
 
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function retryGetMotorSerial(device: usb.Device): Promise<string> {
+  while (true) {
+    const serial = await getMotorSerial(device).catch(async e => {
+      console.log('Error reading serial');
+      await delay(1000);
+      return '';
+    });
+
+    if (serial) return serial;
+  }
+}
+
 /**
  * Check a USB device
  * @param device USB device instance to check if it is one of us
  */
 async function onDeviceAttach(device: usb.Device) {
-  const serial = await getMotorSerial(device);
+  const serial = await retryGetMotorSerial(device);
 
   if (!serial) return;
 
