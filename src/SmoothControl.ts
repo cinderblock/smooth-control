@@ -170,6 +170,7 @@ async function getMotorSerial(dev: usb.Device) {
     );
 
     if (!data) {
+      console.log('No Serial Number detected?');
       dev.close();
       return false;
     }
