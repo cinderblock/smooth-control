@@ -302,6 +302,23 @@ type Listener = (
 ) => void;
 const listeners: Listener[] = [];
 
+export type WriteError = {
+  /**
+   * LibUSB Error
+   */
+  error: usb.LibUSBException;
+  /** Device serial number */
+  serial: string;
+  /**
+   * Command that was being sent
+   */
+  command: Command;
+  /**
+   * Nanoseconds it took to reject
+   */
+  time: number;
+};
+
 /**
  * Call a function whenever a motor is connected to the computer
  * @param listener Function to call every time any motor device is connected
@@ -522,7 +539,7 @@ export default function USBInterface(serial: string, options?: Options) {
   /*
    * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
    */
-  async function write(command: Command, cb?: () => any) {
+  async function write(command: Command, cb?: (err?: WriteError) => void) {
     if (!device) {
       warning('Trying to write with no motor attached.', serial, command);
       return false;
@@ -539,9 +556,9 @@ export default function USBInterface(serial: string, options?: Options) {
       );
     }
 
-    writeNumberToBuffer(command.mode);
-
     try {
+      writeNumberToBuffer(command.mode);
+
       switch (command.mode) {
         case CommandMode.MLXDebug:
           if (command.data === undefined)
@@ -620,35 +637,47 @@ export default function USBInterface(serial: string, options?: Options) {
               break;
           }
       }
+    } catch (e) {
+      e = new TypeError('Failure parsing command' + e);
+      warning(e);
+      throw e;
+    }
 
-      // Send a Set Report control request
-      await new Promise((resolve, reject) =>
-        dev.controlTransfer(
-          // bmRequestType (constant for this control request)
-          usb.LIBUSB_RECIPIENT_INTERFACE |
-            usb.LIBUSB_REQUEST_TYPE_CLASS |
-            usb.LIBUSB_ENDPOINT_OUT,
-          // bmRequest (constant for this control request)
-          0x09,
-          // wValue (MSB is report type, LSB is report number)
-          0x0809,
-          // wIndex (interface number)
-          0,
-          // message to be sent
-          writeBuffer,
-          err => {
-            if (err && err.errno != 4) {
-              events.emit('error', err);
-              // reject(err);
-            }
+    const start = process.hrtime();
+    // Send a Set Report control request
+    return new Promise((resolve, reject) =>
+      dev.controlTransfer(
+        // bmRequestType (constant for this control request)
+        usb.LIBUSB_RECIPIENT_INTERFACE |
+          usb.LIBUSB_REQUEST_TYPE_CLASS |
+          usb.LIBUSB_ENDPOINT_OUT,
+        // bmRequest (constant for this control request)
+        0x09,
+        // wValue (MSB is report type, LSB is report number)
+        0x0809,
+        // wIndex (interface number)
+        0,
+        // message to be sent
+        writeBuffer,
+        error => {
+          if (error && error.errno != 4) {
+            const fullError = {
+              error,
+              command,
+              serial,
+              time: process
+                .hrtime(start)
+                .reduce((sec, nano) => sec * 1e9 + nano),
+            };
+            cb && cb(fullError);
+            reject(fullError);
+          } else {
+            cb && cb();
             resolve();
           }
-        )
-      );
-    } catch (e) {
-      warning('Failure trying to send data', command, serial, e);
-    }
-    cb && cb();
+        }
+      )
+    );
   }
 
   function onStatus(handler: (status: 'missing' | 'connected') => void) {
