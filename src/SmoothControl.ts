@@ -343,13 +343,14 @@ function delay(ms: number) {
 
 async function retryGetMotorSerial(device: usb.Device): Promise<string> {
   while (true) {
-    const serial = await getMotorSerial(device).catch(async e => {
+    try {
+      const ret = await getMotorSerial(device);
+      if (ret) return ret;
+      console.log('Empty ret!?');
+    } catch (e) {
       console.log('Error reading serial');
-      await delay(1000);
-      return '';
-    });
-
-    if (serial) return serial;
+    }
+    await delay(1000);
   }
 }
 
