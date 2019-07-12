@@ -359,7 +359,7 @@ async function retryGetMotorSerial(device: usb.Device): Promise<string> {
  * @param device USB device instance to check if it is one of us
  */
 async function onDeviceAttach(device: usb.Device) {
-  const serial = await retryGetMotorSerial(device);
+  const serial = await getMotorSerial(device);
 
   if (!serial) return;
 
