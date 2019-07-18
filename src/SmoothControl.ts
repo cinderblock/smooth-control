@@ -77,7 +77,7 @@ export type BootloaderCommand = {
 
 export type Command =
   | ClearFaultCommand
-  | MLXCommand
+  // | MLXCommand
   | ThreePhaseCommand
   | CalibrationCommand
   | PushCommand
@@ -115,31 +115,16 @@ export enum MlxResponseState {
 }
 
 // Must match REPORT_SIZE
-const reportLength = 37;
+const reportLength = 8;
 
 export type ReadData = {
   state: ControllerState;
   fault: ControllerFault;
   position: number;
-  velocity: number;
   amplitude: number;
-  /**
-   * Raw bits of a "status word". Other values have parsed version of this.
-   */
-  statusBitsRaw: number;
-  calibrated: boolean;
   cpuTemp: number;
   current: number;
-  vBatt: number;
-  VDD: number;
-  AS: number;
-  BS: number;
-  CS: number;
-  mlxResponse?: Buffer;
-  mlxResponseState?: MlxResponseState;
-  mlxParsedResponse?: ReturnType<typeof parseMLX>;
   mlxCRCFailures: number;
-  controlLoops: number;
 };
 
 interface Events {
@@ -228,55 +213,28 @@ export function parseHostDataIN(data: Buffer): ReadData {
   }
 
   // Matches USB/PacketFormats.h USBDataINShape
-  const state = read(1);
-  const fault = read(1);
-  const position = read(2);
-  const velocity = read(2, true);
-  // Store full word. Get the low 14 bits as actual raw angle
-  const statusBitsRaw = read(2);
+  const firstWord = read(2);
+  const state = (firstWord >> 0) & 0b111;
+  const fault = (firstWord >> 3) & 0b111;
+  const position = firstWord >> 6;
+
   const cpuTemp = read(2);
+
   const current = read(2, true);
-  const VDD = read(2);
-  const vBatt = read(2);
-  const forward = !!read(1);
-  const amplitude = (forward ? 1 : -1) * read(1);
-  const AS = read(2);
-  const BS = read(2);
-  const CS = read(2);
 
-  const mlxResponse = readBuffer(8);
-  const mlxResponseState = read(1);
-  const controlLoops = read(2);
-  const mlxCRCFailures = read(2);
+  const amplitude = read(1);
 
-  // Top bit specifies if controller thinks it is calibrated
-  const calibrated = !!(statusBitsRaw & (1 << 15));
-  const mlxDataValid = !!(statusBitsRaw & (1 << 14));
+  const mlxCRCFailures = read(1);
 
   const ret: ReadData = {
     state,
     fault,
     position,
-    velocity,
     amplitude,
-    statusBitsRaw,
-    calibrated,
     cpuTemp,
     current,
-    vBatt,
-    VDD,
-    AS,
-    BS,
-    CS,
-    controlLoops,
     mlxCRCFailures,
   };
-
-  if (mlxDataValid) {
-    ret.mlxResponse = mlxResponse;
-    ret.mlxResponseState = mlxResponseState;
-    ret.mlxParsedResponse = parseMLX(mlxResponse);
-  }
 
   return ret;
 }
@@ -578,17 +536,17 @@ export default function USBInterface(serial: string, options?: Options) {
       writeNumberToBuffer(command.mode);
 
       switch (command.mode) {
-        case CommandMode.MLXDebug:
-          if (command.data === undefined)
-            throw new Error('Argument `data` missing');
-          if (!(command.data.length == 7 || command.data.length == 8))
-            throw new Error('Argument `data` has incorrect length');
+        // case CommandMode.MLXDebug:
+        //   if (command.data === undefined)
+        //     throw new Error('Argument `data` missing');
+        //   if (!(command.data.length == 7 || command.data.length == 8))
+        //     throw new Error('Argument `data` has incorrect length');
 
-          command.data.copy(writeBuffer, pos);
-          pos += 8;
-          const generateCRC = command.crc || command.data.length == 7;
-          writeNumberToBuffer(generateCRC ? 1 : 0);
-          break;
+        //   command.data.copy(writeBuffer, pos);
+        //   pos += 8;
+        //   const generateCRC = command.crc || command.data.length == 7;
+        //   writeNumberToBuffer(generateCRC ? 1 : 0);
+        //   break;
 
         case CommandMode.ThreePhase:
           if (command.A === undefined) throw new Error('Argument `A` missing');
