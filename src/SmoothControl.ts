@@ -214,11 +214,12 @@ export function parseHostDataIN(data: Buffer): ReadData {
 
   // Matches USB/PacketFormats.h USBDataINShape
   const firstWord = read(2);
-  const state = (firstWord >> 0) & 0b111;
-  const fault = (firstWord >> 3) & 0b111;
-  const position = firstWord >> 6;
+  const fault = firstWord & 0b111;
+  const position = firstWord >> 3;
 
-  const cpuTemp = read(2);
+  const secondWord = read(2);
+  const state = secondWord & 0b11;
+  const cpuTemp = secondWord >> 2;
 
   const current = read(2, true);
 
