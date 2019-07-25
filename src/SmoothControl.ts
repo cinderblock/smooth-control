@@ -622,7 +622,7 @@ export default function USBInterface(serial: string, options?: Options) {
 
     const start = process.hrtime();
     // Send a Set Report control request
-    return new Promise((resolve, reject) =>
+    return new Promise<void>((resolve, reject) =>
       dev.controlTransfer(
         // bmRequestType (constant for this control request)
         usb.LIBUSB_RECIPIENT_INTERFACE |
