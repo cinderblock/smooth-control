@@ -284,7 +284,7 @@ export type WriteError = {
  * @param listener Function to call every time any motor device is connected
  * @returns A cleanup function to stop listening.
  */
-export async function addAttachListener(listener: Listener) {
+export function addAttachListener(listener: Listener) {
   listeners.push(listener);
   motors
     .filter(m => m.device)
@@ -417,7 +417,7 @@ export default function USBInterface(serial: string, options?: Options) {
     motors.push({ serial, consumer: { attach, detach } });
   }
 
-  async function attach(dev: usb.Device) {
+  function attach(dev: usb.Device) {
     info('Attaching', serial);
 
     dev.open();
@@ -493,7 +493,7 @@ export default function USBInterface(serial: string, options?: Options) {
     device = undefined;
   }
 
-  async function read() {
+  function read() {
     if (!device) {
       warning('Trying to read with no motor attached.', serial);
       return false;
@@ -516,7 +516,7 @@ export default function USBInterface(serial: string, options?: Options) {
   /*
    * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
    */
-  async function write(command: Command, cb?: (err?: WriteError) => void) {
+  function write(command: Command, cb?: (err?: WriteError) => void) {
     if (!device) {
       warning('Trying to write with no motor attached.', serial, command);
       return false;
