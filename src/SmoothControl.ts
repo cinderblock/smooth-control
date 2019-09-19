@@ -426,10 +426,21 @@ export default function USBInterface(serial: string, options?: Options) {
   let endpoint: usb.InEndpoint;
   const events = new EventEmitter() as TypedEventEmitter<Events>;
 
+  let transfer: any, transferResolve: any;
+
   let status: 'missing' | 'connected';
 
   // Allocate a write buffer once and keep reusing it
-  const writeBuffer = Buffer.alloc(reportLength);
+  // const writeBuffer = Buffer.alloc(reportLength);
+
+  const sendBuffer = Buffer.alloc(reportLength + usb.LIBUSB_CONTROL_SETUP_SIZE);
+  const writeBuffer = sendBuffer.slice(usb.LIBUSB_CONTROL_SETUP_SIZE);
+
+  sendBuffer.writeUInt8(usb.LIBUSB_RECIPIENT_INTERFACE | usb.LIBUSB_REQUEST_TYPE_CLASS | usb.LIBUSB_ENDPOINT_OUT, 0);
+  sendBuffer.writeUInt8(0x09, 1);
+  sendBuffer.writeUInt16LE(0x0809, 2);
+  sendBuffer.writeUInt16LE(0, 4);
+  sendBuffer.writeUInt16LE(writeBuffer.length, 6);
 
   const found = motors.find(d => serial == d.serial);
   if (found) {
@@ -449,6 +460,15 @@ export default function USBInterface(serial: string, options?: Options) {
     dev.open();
 
     device = dev;
+    transfer = new ((usb as unknown) as any).Transfer(
+      device,
+      0,
+      usb.LIBUSB_TRANSFER_TYPE_CONTROL,
+      1000,
+      (error: any, buf: Buffer, actual: number) => {
+        transferResolve();
+      }
+    );
 
     // Motor HID interface is always interface 0
     const intf = device.interface(0);
@@ -635,6 +655,12 @@ export default function USBInterface(serial: string, options?: Options) {
     }
 
     const start = process.hrtime();
+
+    return new Promise((resolve, reject) => {
+      transferResolve = resolve;
+      transfer.submit(sendBuffer);
+    });
+
     // Send a Set Report control request
     return new Promise((resolve, reject) =>
       dev.controlTransfer(
