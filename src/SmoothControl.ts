@@ -195,9 +195,7 @@ type Options = {
   polling?: number | boolean;
 };
 
-function parseMLX(
-  mlxResponse: Buffer
-): ReturnType<typeof MLX.parseData> | string {
+function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | string {
   try {
     return MLX.parseData(mlxResponse);
   } catch (e) {
@@ -211,8 +209,7 @@ function parseMLX(
  * @param data Raw block of bytes from a motor packet
  */
 export function parseHostDataIN(data: Buffer): ReadData {
-  if (data.length != reportLength)
-    throw new Error('Invalid data. Refusing to parse');
+  if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
 
   let i = 0;
   function read(length: number, signed: boolean = false) {
@@ -295,12 +292,7 @@ const motors: {
   consumer?: Consumer;
 }[] = [];
 
-type Listener = (
-  serial: string,
-  device: usb.Device,
-  duplicate: boolean,
-  consumer?: Consumer
-) => void;
+type Listener = (serial: string, device: usb.Device, duplicate: boolean, consumer?: Consumer) => void;
 const listeners: Listener[] = [];
 
 export type WriteError = {
@@ -327,9 +319,7 @@ export type WriteError = {
  */
 export async function addAttachListener(listener: Listener) {
   listeners.push(listener);
-  motors
-    .filter(m => m.device)
-    .forEach(m => listener(m.serial, m.device!, false, m.consumer));
+  motors.filter(m => m.device).forEach(m => listener(m.serial, m.device!, false, m.consumer));
 
   return () => {
     const index = listeners.indexOf(listener);
@@ -428,10 +418,7 @@ export default function USBInterface(serial: string, options?: Options) {
 
   options = options || {};
 
-  const polling =
-    (options.polling === undefined || options.polling === true
-      ? 3
-      : options.polling) || 0;
+  const polling = (options.polling === undefined || options.polling === true ? 3 : options.polling) || 0;
 
   const { info, debug, warning } = DebugFunctions(options.debug);
 
@@ -447,9 +434,7 @@ export default function USBInterface(serial: string, options?: Options) {
   const found = motors.find(d => serial == d.serial);
   if (found) {
     if (found.consumer) {
-      throw new Error(
-        "Can't have two consumers of the same serial number: " + serial
-      );
+      throw new Error("Can't have two consumers of the same serial number: " + serial);
     } else {
       found.consumer = { attach, detach };
       if (found.device) attach(found.device);
@@ -468,8 +453,7 @@ export default function USBInterface(serial: string, options?: Options) {
     // Motor HID interface is always interface 0
     const intf = device.interface(0);
 
-    if (process.platform != 'win32' && intf.isKernelDriverActive())
-      intf.detachKernelDriver();
+    if (process.platform != 'win32' && intf.isKernelDriverActive()) intf.detachKernelDriver();
 
     intf.claim();
 
@@ -567,11 +551,7 @@ export default function USBInterface(serial: string, options?: Options) {
 
     let pos = 1;
     function writeNumberToBuffer(num: number, len = 1, signed = false) {
-      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](
-        Math.round(num),
-        pos,
-        len
-      );
+      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](Math.round(num), pos, len);
     }
 
     try {
@@ -579,8 +559,7 @@ export default function USBInterface(serial: string, options?: Options) {
 
       switch (command.mode) {
         case CommandMode.MLXDebug:
-          if (command.data === undefined)
-            throw new Error('Argument `data` missing');
+          if (command.data === undefined) throw new Error('Argument `data` missing');
           if (!(command.data.length == 7 || command.data.length == 8))
             throw new Error('Argument `data` has incorrect length');
 
@@ -601,26 +580,21 @@ export default function USBInterface(serial: string, options?: Options) {
           break;
 
         case CommandMode.Calibration:
-          if (command.angle === undefined)
-            throw new Error('Argument `angle` missing');
-          if (command.amplitude === undefined)
-            throw new Error('Argument `amplitude` missing');
+          if (command.angle === undefined) throw new Error('Argument `angle` missing');
+          if (command.amplitude === undefined) throw new Error('Argument `amplitude` missing');
 
           writeNumberToBuffer(command.angle, 2);
           writeNumberToBuffer(command.amplitude, 1);
           break;
 
         case CommandMode.Push:
-          if (command.command === undefined)
-            throw new Error('Argument `command` missing');
+          if (command.command === undefined) throw new Error('Argument `command` missing');
           writeNumberToBuffer(command.command, 2, true);
           break;
 
         case CommandMode.Servo:
-          if (command.command === undefined)
-            throw new Error('Argument `command` missing');
-          if (command.pwmMode === undefined)
-            throw new Error('Argument `pwmMode` missing');
+          if (command.command === undefined) throw new Error('Argument `command` missing');
+          if (command.pwmMode === undefined) throw new Error('Argument `pwmMode` missing');
 
           // CommandMode::Servo
           const PWMMode = {
@@ -646,8 +620,7 @@ export default function USBInterface(serial: string, options?: Options) {
               skip = true;
             case 'pwm': // case 1: Set pwm Mode
             case 'command': // case 1: setAmplitude  // this is redundant to pwmMode
-              if (!skip)
-                command.command = clipRange(-255, 255)(command.command);
+              if (!skip) command.command = clipRange(-255, 255)(command.command);
             case 'position': // case 2: setPosition
             case 'velocity': // case 3: setVelocity
             case 'spare': // case 4: Set Spare Mode
@@ -666,9 +639,7 @@ export default function USBInterface(serial: string, options?: Options) {
     return new Promise((resolve, reject) =>
       dev.controlTransfer(
         // bmRequestType (constant for this control request)
-        usb.LIBUSB_RECIPIENT_INTERFACE |
-          usb.LIBUSB_REQUEST_TYPE_CLASS |
-          usb.LIBUSB_ENDPOINT_OUT,
+        usb.LIBUSB_RECIPIENT_INTERFACE | usb.LIBUSB_REQUEST_TYPE_CLASS | usb.LIBUSB_ENDPOINT_OUT,
         // bmRequest (constant for this control request)
         0x09,
         // wValue (MSB is report type, LSB is report number)
@@ -683,9 +654,7 @@ export default function USBInterface(serial: string, options?: Options) {
               error,
               command,
               serial,
-              time: process
-                .hrtime(start)
-                .reduce((sec, nano) => sec * 1e9 + nano),
+              time: process.hrtime(start).reduce((sec, nano) => sec * 1e9 + nano),
             };
             cb && cb(fullError);
             reject(fullError);
