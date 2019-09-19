@@ -163,10 +163,10 @@ async function getMotorSerial(dev: usb.Device) {
 
   try {
     const data = await new Promise<Buffer | undefined>((resolve, reject) =>
-      dev.getStringDescriptor(
-        dev.deviceDescriptor.iSerialNumber,
-        (err, result) => (err && reject(err)) || resolve(result)
-      )
+      dev.getStringDescriptor(dev.deviceDescriptor.iSerialNumber, (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      })
     );
 
     if (!data) {
