@@ -483,11 +483,30 @@ export default function USBInterface(serial: string, options?: Options) {
     // Motor HID IN endpoint is always endpoint 0
     endpoint = intf.endpoints[0] as usb.InEndpoint;
 
-    if (polling) {
-      // Start polling. 3 pending requests at all times
-      endpoint.startPoll(polling, reportLength);
+    const inBuffer = Buffer.allocUnsafe(reportLength);
 
-      endpoint.on('data', d => events.emit('data', parseHostDataIN(d)));
+    const inTransfer = ((endpoint as unknown) as any).makeTransfer(
+      1000,
+      (error: Error & { errno: number }, buf: Buffer, actual: number) => {
+        if (error && error.errno != 4) {
+          events.emit('error', error);
+
+          return;
+        }
+
+        events.emit('data', parseHostDataIN(buf.slice(0, actual)));
+
+        if (polling) doInTransfer();
+      }
+    );
+
+    // TODO: Use this function for non-polling reading of data
+    function doInTransfer() {
+      inTransfer.submit(inBuffer);
+    }
+
+    if (polling) {
+      doInTransfer();
     }
 
     endpoint.on('error', err => {
