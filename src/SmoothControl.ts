@@ -541,7 +541,7 @@ export default function USBInterface(serial: string, options?: Options) {
   /*
    * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
    */
-  async function write(command: Command, cb?: (err?: WriteError) => void) {
+  function write(command: Command, cb?: (err?: WriteError) => void) {
     if (!device) {
       warning('Trying to write with no motor attached.', serial, command);
       return false;
