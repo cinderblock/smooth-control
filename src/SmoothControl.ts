@@ -1,5 +1,5 @@
-import EventEmitter from 'events';
-import usb, { InEndpoint } from 'usb';
+import EventEmitter = require('events');
+import * as usb from 'usb';
 import * as MLX from 'mlx90363';
 import TypedEventEmitter from 'typed-emitter';
 import clipRange from './utils/clipRange';
@@ -461,7 +461,7 @@ export default function USBInterface(serial: string, options?: Options) {
     writeBuffer[0] = intf.interfaceNumber;
 
     // Motor HID IN endpoint is always endpoint 0
-    endpoint = intf.endpoints[0] as InEndpoint;
+    endpoint = intf.endpoints[0] as usb.InEndpoint;
 
     if (polling) {
       // Start polling. 3 pending requests at all times
