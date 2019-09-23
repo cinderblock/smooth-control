@@ -486,7 +486,13 @@ export default function USBInterface(serial: string, options?: Options) {
           return;
         }
 
-        events.emit('data', parseHostDataIN(buf.slice(0, actual)));
+        try {
+          const data = parseHostDataIN(buf.slice(0, actual));
+
+          events.emit('data', data);
+        } catch (e) {
+          events.emit('error', e);
+        }
 
         if (polling) doInTransfer();
       }
