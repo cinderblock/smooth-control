@@ -60,7 +60,17 @@ export type PushCommand = {
 export type ServoCommand = {
   mode: CommandMode.Servo;
   command: number;
-  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD';
+  pwmMode:
+    | 'pwm'
+    | 'position'
+    | 'velocity'
+    | 'spare'
+    | 'command'
+    | 'kP'
+    | 'kI'
+    | 'kD'
+    | 'synchronousAmplitude'
+    | 'synchronousVelocity';
 };
 
 export type BootloaderCommand = {
@@ -645,6 +655,9 @@ export default function USBInterface(serial: string, options?: Options) {
             kP: 11, // in USBInterface.cpp, send a Proportional Gain constant
             kI: 12,
             kD: 13,
+
+            synchronousAmplitude: 98,
+            synchronousVelocity: 99,
           };
 
           writeNumberToBuffer(PWMMode[command.pwmMode]);
@@ -661,6 +674,13 @@ export default function USBInterface(serial: string, options?: Options) {
             case 'position': // case 2: setPosition
             case 'velocity': // case 3: setVelocity
             case 'spare': // case 4: Set Spare Mode
+              break;
+
+            case 'synchronousAmplitude':
+              command.command &= 0xff;
+              break;
+            case 'synchronousVelocity':
+              command.command &= 0xffffffff;
               break;
 
             // Just in case
