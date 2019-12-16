@@ -96,7 +96,7 @@ export enum ControllerState {
 // Matches main.hpp Fault
 export enum ControllerFault {
   Init,
-  UndervoltageLockout,
+  UnderVoltageLockout,
   OverCurrent,
   OverTemperature,
   WatchdogReset,
