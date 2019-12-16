@@ -23,6 +23,7 @@ export enum CommandMode {
   Push = 3,
   Servo = 4,
   ClearFault = 5,
+  SynchronousDrive = 6,
   Bootloader = 0xfe,
 }
 
@@ -60,17 +61,26 @@ export type PushCommand = {
 export type ServoCommand = {
   mode: CommandMode.Servo;
   command: number;
-  pwmMode:
-    | 'pwm'
-    | 'position'
-    | 'velocity'
-    | 'spare'
-    | 'command'
-    | 'kP'
-    | 'kI'
-    | 'kD'
-    | 'synchronousAmplitude'
-    | 'synchronousVelocity';
+  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD';
+};
+
+export type SynchronousCommand = {
+  mode: CommandMode.SynchronousDrive;
+  amplitude: number;
+  /**
+   * Velocity command motor should maintain on its own
+   *
+   * Match motor hardware / firmware
+   * const motorCountsPerRevolution = 3 * 256 * 21;
+   * const OverPrecisionBits = 32;
+   * const MicroTicksPerSecond = 16e6;
+   * const velocityUnitMultiplier = (motorCountsPerRevolution << OverPrecisionBits) / MicroTicksPerSecond;
+   *
+   * velocity = revolutionsPerSecond * (motorCountsPerRevolution << OverPrecisionBits) / MicroTicksPerSecond;
+   *
+   * @units Extra precision motor counts per MicroTick period
+   */
+  velocity: number;
 };
 
 export type BootloaderCommand = {
@@ -84,6 +94,7 @@ export type Command =
   | CalibrationCommand
   | PushCommand
   | ServoCommand
+  | SynchronousCommand
   | BootloaderCommand;
 
 // Matches main.hpp State
@@ -676,19 +687,18 @@ export default function USBInterface(serial: string, options?: Options) {
             case 'spare': // case 4: Set Spare Mode
               break;
 
-            case 'synchronousAmplitude':
-              command.command &= 0xff;
-              break;
-            case 'synchronousVelocity':
-              command.command &= 0xffffffff;
-              break;
-
             // Just in case
             default:
               command.command = 0;
               break;
           }
           writeNumberToBuffer(command.command, 4, true);
+          break;
+
+        case CommandMode.SynchronousDrive:
+          writeNumberToBuffer(command.amplitude, 1, true);
+          writeNumberToBuffer(command.velocity, 4, true);
+          break;
       }
     } catch (e) {
       e = new TypeError('Failure parsing command' + e);
