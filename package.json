@@ -16,6 +16,7 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
+    "checkSources": "tsc --noemit",
     "prepare": "npm run build"
   },
   "devDependencies": {
