@@ -128,19 +128,83 @@ export enum MlxResponseState {
 }
 
 // Must match REPORT_SIZE
-const reportLength = 37;
+const reportLength = 33;
 
-export type ReadData = {
-  state: ControllerState;
+type FaultData = {
+  state: ControllerState.Fault;
+
   fault: ControllerFault;
-  position: number;
-  velocity: number;
-  amplitude: number;
+};
+
+type GoodMlxResponse = {
+  mlxDataValid: true;
+
+  mlxResponse: Buffer;
+  mlxResponseState: MlxResponseState;
+  mlxParsedResponse: ReturnType<typeof parseMLX>;
+};
+
+type BadMlxResponse = {
+  mlxDataValid: false;
+};
+
+type ManualData = {
+  state: ControllerState.Manual;
+
   /**
-   * Raw bits of a "status word". Other values have parsed version of this.
+   * Motor position
+   * @units motor counts
    */
-  statusBitsRaw: number;
-  calibrated: boolean;
+  position: number;
+  /**
+   * Not yet implemented
+   */
+  velocity: number;
+
+  /**
+   * How hard are we trying to "push"
+   * @units pwm %
+   * @range [0, 255]
+   */
+  amplitude: number;
+} & (GoodMlxResponse | BadMlxResponse);
+
+type NormalData = {
+  state: ControllerState.Normal;
+
+  /**
+   * Motor position
+   * @units motor counts
+   */
+  position: number;
+  /**
+   * Velocity estimate
+   *
+   * Match motor hardware / firmware
+   * const motorCountsPerRevolution = 3 * 256 * 21;
+   * const timerCounts =
+   * const velocityUnitMultiplier = motorCountsPerRevolution / timerCounts;
+   *
+   * velocity = revolutionsPerSecond * motorCountsPerRevolution / timerCounts;
+   *
+   * @units Motor counts per TODO: check units
+   */
+  velocity: number;
+
+  /**
+   * How hard are we trying to "push"
+   * @units pwm %
+   * @range [-255, 255]
+   */
+  amplitude: number;
+
+  calibrated: boolean; // lookupValid;
+
+  controlLoops: number;
+  mlxCRCFailures: number;
+};
+
+type AnalogData = {
   cpuTemp: number;
   current: number;
   vBatt: number;
@@ -148,12 +212,9 @@ export type ReadData = {
   AS: number;
   BS: number;
   CS: number;
-  mlxResponse?: Buffer;
-  mlxResponseState?: MlxResponseState;
-  mlxParsedResponse?: ReturnType<typeof parseMLX>;
-  mlxCRCFailures: number;
-  controlLoops: number;
 };
+
+export type ReadData = (FaultData | ManualData | NormalData) & AnalogData;
 
 interface Events {
   status: (status: 'missing' | 'connected') => void;
@@ -224,69 +285,70 @@ function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | strin
 export function parseHostDataIN(data: Buffer): ReadData {
   if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
 
-  let i = 0;
+  let readPosition = 0;
   function read(length: number, signed: boolean = false) {
-    const pos = i;
-    i += length;
+    const pos = readPosition;
+    readPosition += length;
     if (signed) return data.readIntLE(pos, length);
     return data.readUIntLE(pos, length);
   }
   function readBuffer(length: number) {
     const ret = Buffer.allocUnsafe(length);
-    i += data.copy(ret, 0, i);
+    readPosition += data.copy(ret, 0, readPosition);
     return ret;
   }
 
+  const ret = {} as ReadData;
+
   // Matches USB/PacketFormats.h USBDataINShape
-  const state = read(1);
-  const fault = read(1);
-  const position = read(2);
-  const velocity = read(2, true);
-  // Store full word. Get the low 14 bits as actual raw angle
-  const statusBitsRaw = read(2);
-  const cpuTemp = read(2);
-  const current = read(2, true);
-  const VDD = read(2);
-  const vBatt = read(2);
-  const forward = !!read(1);
-  const amplitude = (forward ? 1 : -1) * read(1);
-  const AS = read(2);
-  const BS = read(2);
-  const CS = read(2);
+  ret.state = read(1);
 
-  const mlxResponse = readBuffer(8);
-  const mlxResponseState = read(1);
-  const controlLoops = read(2);
-  const mlxCRCFailures = read(2);
+  switch (ret.state) {
+    case ControllerState.Fault:
+      const faultData: FaultData = ret;
+      faultData.fault = read(1);
+      break;
 
-  // Top bit specifies if controller thinks it is calibrated
-  const calibrated = !!(statusBitsRaw & (1 << 15));
-  const mlxDataValid = !!(statusBitsRaw & (1 << 14));
+    case ControllerState.Manual:
+      const manualData: ManualData = ret;
+      manualData.position = read(2);
+      manualData.velocity = read(4, true);
+      // Skip sign bit that we know is always 0 in ManualData
+      readPosition++;
+      manualData.amplitude = read(1);
 
-  const ret: ReadData = {
-    state,
-    fault,
-    position,
-    velocity,
-    amplitude,
-    statusBitsRaw,
-    calibrated,
-    cpuTemp,
-    current,
-    vBatt,
-    VDD,
-    AS,
-    BS,
-    CS,
-    controlLoops,
-    mlxCRCFailures,
-  };
+      manualData.mlxDataValid = !!read(1);
 
-  if (mlxDataValid) {
-    ret.mlxResponse = mlxResponse;
-    ret.mlxResponseState = mlxResponseState;
-    ret.mlxParsedResponse = parseMLX(mlxResponse);
+      if (manualData.mlxDataValid) {
+        manualData.mlxResponse = readBuffer(8);
+        manualData.mlxResponseState = read(1);
+        manualData.mlxParsedResponse = parseMLX(manualData.mlxResponse);
+      }
+
+      break;
+
+    case ControllerState.Normal:
+      const normalData: NormalData = ret;
+      normalData.position = read(2);
+      normalData.velocity = read(2, true);
+      normalData.amplitude = (!!read(1) ? 1 : -1) * read(1);
+
+      normalData.calibrated = !!read(1);
+
+      normalData.controlLoops = read(2);
+      normalData.mlxCRCFailures = read(2);
+      break;
   }
+
+  readPosition = 1 + Math.max(1, 18, 11);
+
+  ret.cpuTemp = read(2);
+  ret.current = read(2, true);
+  ret.VDD = read(2);
+  ret.vBatt = read(2);
+  ret.AS = read(2);
+  ret.BS = read(2);
+  ret.CS = read(2);
 
   return ret;
 }
