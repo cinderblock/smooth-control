@@ -294,7 +294,7 @@ function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | strin
  *
  * @param data Raw block of bytes from a motor packet
  */
-export function parseHostDataIN(data: Buffer): ReadData {
+export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
   if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
 
   let readPosition = 0;
@@ -309,8 +309,6 @@ export function parseHostDataIN(data: Buffer): ReadData {
     readPosition += data.copy(ret, 0, readPosition);
     return ret;
   }
-
-  const ret = {} as ReadData;
 
   // Matches USB/PacketFormats.h USBDataINShape
   ret.state = read(1);
@@ -572,6 +570,8 @@ export default function USBInterface(serial: string, options?: Options) {
 
     const inBuffer = Buffer.allocUnsafe(reportLength);
 
+    const inDataObject = {} as ReadData;
+
     const inTransfer = ((endpoint as unknown) as any).makeTransfer(
       1000,
       (error: Error & { errno: number }, buf: Buffer, actual: number) => {
@@ -582,9 +582,7 @@ export default function USBInterface(serial: string, options?: Options) {
         }
 
         try {
-          const data = parseHostDataIN(buf.slice(0, actual));
-
-          events.emit('data', data);
+          events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
         } catch (e) {
           events.emit('error', e);
         }
