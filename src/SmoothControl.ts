@@ -130,7 +130,7 @@ export enum MlxResponseState {
 // Must match REPORT_SIZE
 const reportLength = 33;
 
-type FaultData = {
+export type FaultData = {
   state: ControllerState.Fault;
 
   fault: ControllerFault;
@@ -148,7 +148,7 @@ type BadMlxResponse = {
   mlxDataValid: false;
 };
 
-type ManualData = {
+export type ManualData = {
   state: ControllerState.Manual;
 
   /**
@@ -169,7 +169,7 @@ type ManualData = {
   amplitude: number;
 } & (GoodMlxResponse | BadMlxResponse);
 
-type NormalData = {
+export type NormalData = {
   state: ControllerState.Normal;
 
   /**
@@ -204,7 +204,7 @@ type NormalData = {
   mlxCRCFailures: number;
 };
 
-type AnalogData = {
+export type CommonData = {
   cpuTemp: number;
   current: number;
   vBatt: number;
@@ -214,17 +214,17 @@ type AnalogData = {
   CS: number;
 };
 
-export type ReadData = (FaultData | ManualData | NormalData) & AnalogData;
+export type ReadData = (FaultData | ManualData | NormalData) & CommonData;
 
-export function isFaultState(data: ReadData): data is FaultData & AnalogData {
+export function isFaultState(data: ReadData): data is FaultData & CommonData {
   return data.state === ControllerState.Fault;
 }
 
-export function isManualState(data: ReadData): data is ManualData & AnalogData {
+export function isManualState(data: ReadData): data is ManualData & CommonData {
   return data.state === ControllerState.Manual;
 }
 
-export function isNormalState(data: ReadData): data is NormalData & AnalogData {
+export function isNormalState(data: ReadData): data is NormalData & CommonData {
   return data.state === ControllerState.Normal;
 }
 
