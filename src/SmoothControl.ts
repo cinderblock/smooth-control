@@ -216,6 +216,18 @@ type AnalogData = {
 
 export type ReadData = (FaultData | ManualData | NormalData) & AnalogData;
 
+export function isFaultState(data: ReadData): data is FaultData & AnalogData {
+  return data.state === ControllerState.Fault;
+}
+
+export function isManualState(data: ReadData): data is ManualData & AnalogData {
+  return data.state === ControllerState.Manual;
+}
+
+export function isNormalState(data: ReadData): data is NormalData & AnalogData {
+  return data.state === ControllerState.Normal;
+}
+
 interface Events {
   status: (status: 'missing' | 'connected') => void;
   data: (data: ReadData) => void;
