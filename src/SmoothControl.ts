@@ -392,7 +392,7 @@ export type WriteError = {
  * @param listener Function to call every time any motor device is connected
  * @returns A cleanup function to stop listening.
  */
-export async function addAttachListener(listener: Listener) {
+export function addAttachListener(listener: Listener) {
   listeners.push(listener);
   motors.filter(m => m.device).forEach(m => listener(m.serial, m.device!, false, m.consumer));
 
