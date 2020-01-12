@@ -330,9 +330,13 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
       manualData.mlxDataValid = !!read(1);
 
       if (manualData.mlxDataValid) {
-        manualData.mlxResponse = readBuffer(8);
+        const res = readBuffer(8);
         manualData.mlxResponseState = read(1);
-        manualData.mlxParsedResponse = parseMLX(manualData.mlxResponse);
+
+        if (manualData.mlxResponseState > MlxResponseState.Ready) {
+          manualData.mlxResponse = res;
+          manualData.mlxParsedResponse = parseMLX(res);
+        }
       }
 
       break;
