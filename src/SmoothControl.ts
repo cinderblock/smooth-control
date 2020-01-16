@@ -368,8 +368,8 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
 }
 
 interface Consumer {
-  attach: (device: usb.Device) => void;
-  detach: () => void;
+  onAttach: (device: usb.Device) => void;
+  onDetach: () => void;
 }
 
 /**
@@ -456,7 +456,7 @@ async function onDeviceAttach(device: usb.Device) {
     // Let our consumer know
     if (found.consumer) {
       consumer = found.consumer;
-      found.consumer.attach(device);
+      found.consumer.onAttach(device);
     }
   } else {
     duplicate = true;
@@ -491,7 +491,7 @@ export function start(options: { log?: DebugOptions } = {}) {
     if (found) {
       found.device = undefined;
       if (found.consumer) {
-        found.consumer.detach();
+        found.consumer.onDetach();
       }
     }
   });
@@ -536,14 +536,14 @@ export default function USBInterface(serial: string, options?: Options) {
     if (found.consumer) {
       throw new Error("Can't have two consumers of the same serial number: " + serial);
     } else {
-      found.consumer = { attach, detach };
-      if (found.device) attach(found.device);
+      found.consumer = { onAttach, onDetach };
+      if (found.device) onAttach(found.device);
     }
   } else {
-    motors.push({ serial, consumer: { attach, detach } });
+    motors.push({ serial, consumer: { onAttach, onDetach } });
   }
 
-  async function attach(dev: usb.Device) {
+  async function onAttach(dev: usb.Device) {
     info('Attaching', serial);
 
     dev.open();
@@ -644,7 +644,7 @@ export default function USBInterface(serial: string, options?: Options) {
     else endpoint.stopPoll(dev.close);
   }
 
-  function detach() {
+  function onDetach() {
     events.emit('status', (status = 'missing'));
 
     info('Detach', serial);
