@@ -4,6 +4,7 @@ import * as MLX from 'mlx90363';
 import TypedEventEmitter from 'typed-emitter';
 import clipRange from './utils/clipRange';
 import DebugFunctions, { DebugOptions } from './utils/Debug';
+import { SharedPromise } from './utils/SharedPromise';
 
 const deviceVid = 0xdead;
 const devicePid = 0xbeef;
@@ -402,14 +403,18 @@ export type WriteError = {
 };
 
 /**
- * Call a function whenever a motor is connected to the computer
+ * Get notified whenever a motor is connected to the host
  * @param listener Function to call every time any motor device is connected
  * @returns A cleanup function to stop listening.
  */
 export function addAttachListener(listener: Listener) {
+  // Add to list of listeners
   listeners.push(listener);
+
+  // Scan list if connected devices and notify of already connected devices
   motors.filter(m => m.device).forEach(m => listener(m.serial, m.device!, false, m.consumer));
 
+  // Cleanup
   return () => {
     const index = listeners.indexOf(listener);
     if (index >= 0) listeners.splice(index, 1);
@@ -497,12 +502,55 @@ export function start(options: { log?: DebugOptions } = {}) {
   });
 }
 
+interface USBInterface {
+  /**
+   * Get notified on motor disconnect
+   */
+  onStatus: (handler: (status: 'connected' | 'missing') => void) => () => void;
+
+  /**
+   * Receive polling updates from motor
+   */
+  onData: (handler: (data: ReadData) => void) => () => void;
+
+  /**
+   * Handle errors that happen
+   */
+  onError: (handler: (err: usb.LibUSBException) => void) => () => void;
+
+  /**
+   * Efficient manual write. Do not call before previous write has finished.
+   */
+  write: (command: Command) => false | Promise<unknown>;
+  /**
+   * Manual read. Inefficient.
+   */
+  read: () => false | Promise<ReadData>;
+
+  /**
+   * Close this connection
+   */
+  close: () => void;
+}
+
+interface Transfer {
+  new (
+    device: usb.Device,
+    address: number,
+    transferType: number,
+    timeout: number,
+    callback: (error: any, buf: Buffer, actual: number) => void
+  ): Transfer;
+
+  submit(buffer: Buffer): void;
+}
+
 /**
  * Manages a single motor connection (and reconnection). Won't do anything until `start` is called.
  * @param serial Serial number of motor to find
  * @param options
  */
-export default function USBInterface(serial: string, options?: Options) {
+export default function USBInterface(serial: string, options?: Options): USBInterface {
   if (!serial) throw new Error('Invalid ID');
 
   options = options || {};
@@ -512,10 +560,19 @@ export default function USBInterface(serial: string, options?: Options) {
   const { info, debug, warning } = DebugFunctions(options.debug);
 
   let device: usb.Device | undefined;
-  let endpoint: usb.InEndpoint;
+
+  // Use non public API because the public one is inefficient
+  let endpoint: usb.InEndpoint & {
+    makeTransfer: (timeout: number, callback: (error: any, buf: Buffer, actual: number) => void) => Transfer;
+  };
+
   const events = new EventEmitter() as TypedEventEmitter<Events>;
 
-  let transfer: any, transferResolve: any;
+  /**
+   * Object that we reuse for efficient transfers to devices
+   */
+  let outTransfer: Transfer;
+  let outTransferPromise: SharedPromise<{ buffer: Buffer; actual: number }> | undefined;
 
   let status: 'missing' | 'connected';
 
@@ -549,51 +606,57 @@ export default function USBInterface(serial: string, options?: Options) {
     dev.open();
 
     device = dev;
-    transfer = new ((usb as unknown) as any).Transfer(
+
+    // Use non public API because the public one is inefficient
+    const usbHiddenAPI = usb as typeof usb & {
+      Transfer: Transfer;
+    };
+
+    outTransfer = new usbHiddenAPI.Transfer(
       device,
       0,
       usb.LIBUSB_TRANSFER_TYPE_CONTROL,
       1000,
-      (error: any, buf: Buffer, actual: number) => {
-        transferResolve();
+      (error: any, buffer: Buffer, actual: number) => {
+        if (error) outTransferPromise?.reject?.(error);
+        else outTransferPromise?.resolve?.({ buffer, actual });
+
+        outTransferPromise = undefined;
       }
     );
 
     // Motor HID interface is always interface 0
-    const intf = device.interface(0);
+    const hidInterface = device.interface(0);
 
-    if (process.platform != 'win32' && intf.isKernelDriverActive()) intf.detachKernelDriver();
+    if (process.platform != 'win32' && hidInterface.isKernelDriverActive()) hidInterface.detachKernelDriver();
 
-    intf.claim();
+    hidInterface.claim();
 
     // Store interface number as first number in write buffer
-    writeBuffer[0] = intf.interfaceNumber;
+    writeBuffer[0] = hidInterface.interfaceNumber;
 
     // Motor HID IN endpoint is always endpoint 0
-    endpoint = intf.endpoints[0] as usb.InEndpoint;
+    endpoint = hidInterface.endpoints[0] as typeof endpoint;
 
     const inBuffer = Buffer.allocUnsafe(reportLength);
 
     const inDataObject = {} as ReadData;
 
-    const inTransfer = ((endpoint as unknown) as any).makeTransfer(
-      1000,
-      (error: Error & { errno: number }, buf: Buffer, actual: number) => {
-        if (error && error.errno != 4) {
-          events.emit('error', error);
+    const inTransfer = endpoint.makeTransfer(1000, (error: Error & { errno: number }, buf: Buffer, actual: number) => {
+      if (error && error.errno != 4) {
+        events.emit('error', error);
 
-          return;
-        }
-
-        try {
-          events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
-        } catch (e) {
-          events.emit('error', e);
-        }
-
-        if (polling) doInTransfer();
+        return;
       }
-    );
+
+      try {
+        events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
+      } catch (e) {
+        events.emit('error', e);
+      }
+
+      if (polling) doInTransfer();
+    });
 
     // TODO: Use this function for non-polling reading of data
     function doInTransfer() {
@@ -652,7 +715,8 @@ export default function USBInterface(serial: string, options?: Options) {
     device = undefined;
   }
 
-  async function read() {
+  // Manual read. Not efficient.
+  function read() {
     if (!device) {
       warning('Trying to read with no motor attached.', serial);
       return false;
@@ -672,16 +736,20 @@ export default function USBInterface(serial: string, options?: Options) {
     });
   }
 
-  /*
-   * Writes data that is read by Interface.cpp CALLBACK_HID_Device_ProcessHIDReport
+  /**
+   *
+   * @param command Command to send
+   * @param cb
    */
-  function write(command: Command, cb?: (err?: WriteError) => void) {
+  function write(command: Command) {
     if (!device) {
       warning('Trying to write with no motor attached.', serial, command);
       return false;
     }
 
-    const dev = device;
+    if (outTransferPromise) {
+      throw new Error('Previous write not complete');
+    }
 
     let pos = 1;
     function writeNumberToBuffer(num: number, len = 1, signed = false) {
@@ -782,43 +850,11 @@ export default function USBInterface(serial: string, options?: Options) {
       throw e;
     }
 
-    const start = process.hrtime();
+    outTransferPromise = SharedPromise();
 
-    return new Promise((resolve, reject) => {
-      transferResolve = resolve;
-      transfer.submit(sendBuffer);
-    });
+    outTransfer.submit(sendBuffer);
 
-    // Send a Set Report control request
-    return new Promise((resolve, reject) =>
-      dev.controlTransfer(
-        // bmRequestType (constant for this control request)
-        usb.LIBUSB_RECIPIENT_INTERFACE | usb.LIBUSB_REQUEST_TYPE_CLASS | usb.LIBUSB_ENDPOINT_OUT,
-        // bmRequest (constant for this control request)
-        0x09,
-        // wValue (MSB is report type, LSB is report number)
-        0x0809,
-        // wIndex (interface number)
-        0,
-        // message to be sent
-        writeBuffer,
-        error => {
-          if (error && error.errno != 4) {
-            const fullError = {
-              error,
-              command,
-              serial,
-              time: process.hrtime(start).reduce((sec, nano) => sec * 1e9 + nano),
-            };
-            cb && cb(fullError);
-            reject(fullError);
-          } else {
-            cb && cb();
-            resolve();
-          }
-        }
-      )
-    );
+    return outTransferPromise.promise;
   }
 
   function onStatus(handler: (status: 'missing' | 'connected') => void) {
