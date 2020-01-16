@@ -222,26 +222,6 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     events.emit('status', (status = 'connected'));
 
     info('Attached', serial);
-
-    // Sample set configuration (not needed for our simple device)
-    // hidDevice.controlTransfer(
-    //   // bmRequestType
-    //   usb.LIBUSB_RECIPIENT_DEVICE | usb.LIBUSB_REQUEST_TYPE_STANDARD | usb.LIBUSB_ENDPOINT_OUT,
-    //   // bmRequest
-    //   usb.LIBUSB_REQUEST_SET_CONFIGURATION,
-    //   // wValue (Configuration value)
-    //   0,
-    //   // wIndex
-    //   0,
-    //   // message to be sent
-    //   Buffer.alloc(0),
-    //   (err, data) => {
-    //     if (err) {
-    //       process.nextTick(() => events.emit('error', err));
-    //       return;
-    //     }
-    //   }
-    // );
   }
 
   function close() {
