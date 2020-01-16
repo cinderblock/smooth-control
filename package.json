@@ -20,7 +20,7 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^13.1.6",
+    "@types/node": "^13.1.7",
     "@types/usb": "^1.5.1",
     "prettier": "^1.19.1",
     "tslint": "^5.20.1",
