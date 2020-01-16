@@ -1,506 +1,52 @@
 import EventEmitter = require('events');
-import * as usb from 'usb';
-import * as MLX from 'mlx90363';
+import * as USB from 'usb';
 import TypedEventEmitter from 'typed-emitter';
 import clipRange from './utils/clipRange';
 import DebugFunctions, { DebugOptions } from './utils/Debug';
 import { SharedPromise } from './utils/SharedPromise';
+import { motors } from './ConnectedMotorManager';
+import { ReadData, Command, reportLength, parseHostDataIN, CommandMode } from './parseData';
 
-const deviceVid = 0xdead;
-const devicePid = 0xbeef;
-
-function isDeviceMotorDriver(device: usb.Device) {
-  const dec = device.deviceDescriptor;
-  const ven = dec.idVendor;
-  const prod = dec.idProduct;
-  return ven == deviceVid && prod == devicePid;
-}
-
-// Matches PacketFormats.h
-export enum CommandMode {
-  MLXDebug = 0,
-  ThreePhase = 1,
-  Calibration = 2,
-  Push = 3,
-  Servo = 4,
-  ClearFault = 5,
-  SynchronousDrive = 6,
-  Bootloader = 0xfe,
-}
+export {
+  CommandMode,
+  ClearFaultCommand,
+  MLXCommand,
+  ThreePhaseCommand,
+  CalibrationCommand,
+  PushCommand,
+  ServoCommand,
+  SynchronousCommand,
+  BootloaderCommand,
+  Command,
+  ControllerState,
+  ControllerFault,
+  MlxResponseState,
+  FaultData,
+  ManualData,
+  NormalData,
+  CommonData,
+  ReadData,
+  isFaultState,
+  isManualState,
+  isNormalState,
+  parseHostDataIN,
+} from './parseData';
+export { addAttachListener, start } from './ConnectedMotorManager';
 
 // Make melexis sub module easily accessible to others
+import * as MLX from 'mlx90363';
 export const Melexis = MLX;
-
-export type ClearFaultCommand = {
-  mode: CommandMode.ClearFault;
-};
-
-export type MLXCommand = {
-  mode: CommandMode.MLXDebug;
-  data: Buffer;
-  crc?: boolean;
-};
-
-export type ThreePhaseCommand = {
-  mode: CommandMode.ThreePhase;
-  A: number;
-  B: number;
-  C: number;
-};
-
-export type CalibrationCommand = {
-  mode: CommandMode.Calibration;
-  angle: number;
-  amplitude: number;
-};
-
-export type PushCommand = {
-  mode: CommandMode.Push;
-  command: number;
-};
-
-export type ServoCommand = {
-  mode: CommandMode.Servo;
-  command: number;
-  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD';
-};
-
-export type SynchronousCommand = {
-  mode: CommandMode.SynchronousDrive;
-  amplitude: number;
-  /**
-   * Velocity command motor should maintain on its own
-   *
-   * Match motor hardware / firmware
-   * const motorCountsPerRevolution = 3 * 256 * 21;
-   * const OverPrecisionBits = 32;
-   * const MicroTicksPerSecond = 16e6;
-   * const velocityUnitMultiplier = (motorCountsPerRevolution << OverPrecisionBits) / MicroTicksPerSecond;
-   *
-   * velocity = revolutionsPerSecond * (motorCountsPerRevolution << OverPrecisionBits) / MicroTicksPerSecond;
-   *
-   * @units Extra precision motor counts per MicroTick period
-   */
-  velocity: number;
-};
-
-export type BootloaderCommand = {
-  mode: CommandMode.Bootloader;
-};
-
-export type Command =
-  | ClearFaultCommand
-  | MLXCommand
-  | ThreePhaseCommand
-  | CalibrationCommand
-  | PushCommand
-  | ServoCommand
-  | SynchronousCommand
-  | BootloaderCommand;
-
-// Matches main.hpp State
-export enum ControllerState {
-  Fault,
-  Manual,
-  Normal,
-}
-
-// Matches main.hpp Fault
-export enum ControllerFault {
-  Init,
-  UnderVoltageLockout,
-  OverCurrent,
-  OverTemperature,
-  WatchdogReset,
-  BrownOutReset,
-  InvalidCommand,
-}
-
-export enum MlxResponseState {
-  Init,
-  Ready,
-  Receiving,
-  Received,
-  failedCRC,
-  TypeA,
-  TypeAB,
-  TypeXYZ,
-  Other,
-}
-
-// Must match REPORT_SIZE
-const reportLength = 33;
-
-export type FaultData = {
-  state: ControllerState.Fault;
-
-  fault: ControllerFault;
-};
-
-type GoodMlxResponse = {
-  mlxDataValid: true;
-
-  mlxResponse: Buffer;
-  mlxResponseState: MlxResponseState;
-  mlxParsedResponse: ReturnType<typeof parseMLX>;
-};
-
-type BadMlxResponse = {
-  mlxDataValid: false;
-};
-
-export type ManualData = {
-  state: ControllerState.Manual;
-
-  /**
-   * Motor position
-   * @units motor counts
-   */
-  position: number;
-  /**
-   * Not yet implemented
-   */
-  velocity: number;
-
-  /**
-   * How hard are we trying to "push"
-   * @units pwm %
-   * @range [0, 255]
-   */
-  amplitude: number;
-} & (GoodMlxResponse | BadMlxResponse);
-
-export type NormalData = {
-  state: ControllerState.Normal;
-
-  /**
-   * Motor position
-   * @units motor counts
-   */
-  position: number;
-  /**
-   * Velocity estimate
-   *
-   * Match motor hardware / firmware
-   * const motorCountsPerRevolution = 3 * 256 * 21;
-   * const timerCounts =
-   * const velocityUnitMultiplier = motorCountsPerRevolution / timerCounts;
-   *
-   * velocity = revolutionsPerSecond * motorCountsPerRevolution / timerCounts;
-   *
-   * @units Motor counts per TODO: check units
-   */
-  velocity: number;
-
-  /**
-   * How hard are we trying to "push"
-   * @units pwm %
-   * @range [-255, 255]
-   */
-  amplitude: number;
-
-  calibrated: boolean; // lookupValid;
-
-  controlLoops: number;
-  mlxCRCFailures: number;
-};
-
-export type CommonData = {
-  cpuTemp: number;
-  current: number;
-  vBatt: number;
-  VDD: number;
-  AS: number;
-  BS: number;
-  CS: number;
-};
-
-export type ReadData = (FaultData | ManualData | NormalData) & CommonData;
-
-export function isFaultState(data: ReadData): data is FaultData & CommonData {
-  return data.state === ControllerState.Fault;
-}
-
-export function isManualState(data: ReadData): data is ManualData & CommonData {
-  return data.state === ControllerState.Manual;
-}
-
-export function isNormalState(data: ReadData): data is NormalData & CommonData {
-  return data.state === ControllerState.Normal;
-}
 
 interface Events {
   status: (status: 'missing' | 'connected') => void;
   data: (data: ReadData) => void;
-  error: (err: usb.LibUSBException) => void;
-}
-
-/**
- * If this device is not a SmoothControl motor, do not even open it and return false.
- *
- * Otherwise read the serial number from the device and return a closed device.
- * @param dev USB Device to check
- */
-async function getMotorSerial(dev: usb.Device) {
-  if (!isDeviceMotorDriver(dev)) return false;
-
-  // console.log('New Motor Device!');
-
-  dev.open();
-
-  try {
-    const data = await new Promise<Buffer | undefined>((resolve, reject) =>
-      dev.getStringDescriptor(dev.deviceDescriptor.iSerialNumber, (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
-      })
-    );
-
-    if (!data) {
-      console.log('No Serial Number detected?');
-      dev.close();
-      return false;
-    }
-    const dataStr = data
-      .toString()
-      .replace(/\0/g, '')
-      .trim();
-
-    // console.log('Found Motor device:', dataStr);
-
-    dev.close();
-    return dataStr;
-  } catch (e) {
-    console.log('ERROR reading serial number', e);
-  }
-  dev.close();
-  return false;
+  error: (err: USB.LibUSBException) => void;
 }
 
 type Options = {
   debug?: DebugOptions;
   polling?: number | boolean;
 };
-
-function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | string {
-  try {
-    return MLX.parseData(mlxResponse);
-  } catch (e) {
-    return e.toString();
-  }
-}
-
-/**
- * Parse block of bytes from motor into logical object
- *
- * @param data Raw block of bytes from a motor packet
- */
-export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
-  if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
-
-  let readPosition = 0;
-  function read(length: number, signed: boolean = false) {
-    const pos = readPosition;
-    readPosition += length;
-    if (signed) return data.readIntLE(pos, length);
-    return data.readUIntLE(pos, length);
-  }
-  function readBuffer(length: number) {
-    const ret = Buffer.allocUnsafe(length);
-    readPosition += data.copy(ret, 0, readPosition);
-    return ret;
-  }
-
-  // Matches USB/PacketFormats.h USBDataINShape
-  ret.state = read(1);
-
-  switch (ret.state) {
-    case ControllerState.Fault:
-      const faultData: FaultData = ret;
-      faultData.fault = read(1);
-      break;
-
-    case ControllerState.Manual:
-      const manualData: ManualData = ret;
-      manualData.position = read(2);
-      manualData.velocity = read(4, true);
-      // Skip sign bit that we know is always 0 in ManualData
-      readPosition++;
-      manualData.amplitude = read(1);
-
-      manualData.mlxDataValid = !!read(1);
-
-      if (manualData.mlxDataValid) {
-        const res = readBuffer(8);
-        manualData.mlxResponseState = read(1);
-
-        if (manualData.mlxResponseState > MlxResponseState.Ready) {
-          manualData.mlxResponse = res;
-          manualData.mlxParsedResponse = parseMLX(res);
-        }
-      }
-
-      break;
-
-    case ControllerState.Normal:
-      const normalData: NormalData = ret;
-      normalData.position = read(2);
-      normalData.velocity = read(2, true);
-      normalData.amplitude = (!!read(1) ? 1 : -1) * read(1);
-
-      normalData.calibrated = !!read(1);
-
-      normalData.controlLoops = read(2);
-      normalData.mlxCRCFailures = read(2);
-      break;
-  }
-
-  readPosition = 1 + Math.max(1, 18, 11);
-
-  ret.cpuTemp = read(2);
-  ret.current = read(2, true);
-  ret.VDD = read(2);
-  ret.vBatt = read(2);
-  ret.AS = read(2);
-  ret.BS = read(2);
-  ret.CS = read(2);
-
-  return ret;
-}
-
-interface Consumer {
-  onAttach: (device: usb.Device) => void;
-  onDetach: () => void;
-}
-
-/**
- * List of motors connected to host
- */
-const motors: {
-  serial: string;
-  device?: usb.Device;
-  consumer?: Consumer;
-}[] = [];
-
-type Listener = (serial: string, device: usb.Device, duplicate: boolean, consumer?: Consumer) => void;
-const listeners: Listener[] = [];
-
-export type WriteError = {
-  /**
-   * LibUSB Error
-   */
-  error: usb.LibUSBException;
-  /** Device serial number */
-  serial: string;
-  /**
-   * Command that was being sent
-   */
-  command: Command;
-  /**
-   * Nanoseconds it took to reject
-   */
-  time: number;
-};
-
-/**
- * Get notified whenever a motor is connected to the host
- * @param listener Function to call every time any motor device is connected
- * @returns A cleanup function to stop listening.
- */
-export function addAttachListener(listener: Listener) {
-  // Add to list of listeners
-  listeners.push(listener);
-
-  // Scan list if connected devices and notify of already connected devices
-  motors.filter(m => m.device).forEach(m => listener(m.serial, m.device!, false, m.consumer));
-
-  // Cleanup
-  return () => {
-    const index = listeners.indexOf(listener);
-    if (index >= 0) listeners.splice(index, 1);
-  };
-}
-
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function retryGetMotorSerial(device: usb.Device): Promise<string> {
-  while (true) {
-    try {
-      const ret = await getMotorSerial(device);
-      if (ret) return ret;
-      console.log('Empty ret!?');
-    } catch (e) {
-      console.log('Error reading serial');
-    }
-    await delay(1000);
-  }
-}
-
-/**
- * Check a USB device
- * @param device USB device instance to check if it is one of us
- */
-async function onDeviceAttach(device: usb.Device) {
-  const serial = await getMotorSerial(device);
-
-  if (!serial) return;
-
-  const found = motors.find(d => serial == d.serial);
-  let consumer: Consumer;
-  let duplicate = false;
-
-  if (!found) {
-    // First time attach of a motor / no one looking for it
-    motors.push({ serial, device });
-  } else if (!found.device) {
-    // No device holding this spot
-    found.device = device;
-
-    // Let our consumer know
-    if (found.consumer) {
-      consumer = found.consumer;
-      found.consumer.onAttach(device);
-    }
-  } else {
-    duplicate = true;
-    // Don't do anything
-  }
-
-  listeners.forEach(l => l(serial, device, duplicate, consumer));
-}
-
-let started = false;
-/**
- * Start actually looking for and attaching to devices
- */
-export function start(options: { log?: DebugOptions } = {}) {
-  const { info, warning } = DebugFunctions(options.log);
-  info('Started watching for USB devices');
-  // Ensure we only start searching for devices once
-  if (started) {
-    warning('Started again. Ignoring');
-    return;
-  }
-  started = true;
-
-  // When we start, find all devices
-  usb.getDeviceList().forEach(onDeviceAttach);
-  // And listen for any new devices connected
-  usb.on('attach', onDeviceAttach);
-
-  usb.on('detach', dev => {
-    const found = motors.find(({ device }) => device == dev);
-
-    if (found) {
-      found.device = undefined;
-      if (found.consumer) {
-        found.consumer.onDetach();
-      }
-    }
-  });
-}
 
 interface USBInterface {
   /**
@@ -516,7 +62,7 @@ interface USBInterface {
   /**
    * Handle errors that happen
    */
-  onError: (handler: (err: usb.LibUSBException) => void) => () => void;
+  onError: (handler: (err: USB.LibUSBException) => void) => () => void;
 
   /**
    * Efficient manual write. Do not call before previous write has finished.
@@ -535,7 +81,7 @@ interface USBInterface {
 
 interface Transfer {
   new (
-    device: usb.Device,
+    device: USB.Device,
     address: number,
     transferType: number,
     timeout: number,
@@ -559,10 +105,10 @@ export default function USBInterface(serial: string, options?: Options): USBInte
 
   const { info, debug, warning } = DebugFunctions(options.debug);
 
-  let device: usb.Device | undefined;
+  let device: USB.Device | undefined;
 
   // Use non public API because the public one is inefficient
-  let endpoint: usb.InEndpoint & {
+  let endpoint: USB.InEndpoint & {
     makeTransfer: (timeout: number, callback: (error: any, buf: Buffer, actual: number) => void) => Transfer;
   };
 
@@ -579,10 +125,10 @@ export default function USBInterface(serial: string, options?: Options): USBInte
   // Allocate a write buffer once and keep reusing it
   // const writeBuffer = Buffer.alloc(reportLength);
 
-  const sendBuffer = Buffer.alloc(reportLength + usb.LIBUSB_CONTROL_SETUP_SIZE);
-  const writeBuffer = sendBuffer.slice(usb.LIBUSB_CONTROL_SETUP_SIZE);
+  const sendBuffer = Buffer.alloc(reportLength + USB.LIBUSB_CONTROL_SETUP_SIZE);
+  const writeBuffer = sendBuffer.slice(USB.LIBUSB_CONTROL_SETUP_SIZE);
 
-  sendBuffer.writeUInt8(usb.LIBUSB_RECIPIENT_INTERFACE | usb.LIBUSB_REQUEST_TYPE_CLASS | usb.LIBUSB_ENDPOINT_OUT, 0);
+  sendBuffer.writeUInt8(USB.LIBUSB_RECIPIENT_INTERFACE | USB.LIBUSB_REQUEST_TYPE_CLASS | USB.LIBUSB_ENDPOINT_OUT, 0);
   sendBuffer.writeUInt8(0x09, 1);
   sendBuffer.writeUInt16LE(0x0809, 2);
   sendBuffer.writeUInt16LE(0, 4);
@@ -600,7 +146,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     motors.push({ serial, consumer: { onAttach, onDetach } });
   }
 
-  async function onAttach(dev: usb.Device) {
+  async function onAttach(dev: USB.Device) {
     info('Attaching', serial);
 
     dev.open();
@@ -608,14 +154,14 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     device = dev;
 
     // Use non public API because the public one is inefficient
-    const usbHiddenAPI = usb as typeof usb & {
+    const usbHiddenAPI = USB as typeof USB & {
       Transfer: Transfer;
     };
 
     outTransfer = new usbHiddenAPI.Transfer(
       device,
       0,
-      usb.LIBUSB_TRANSFER_TYPE_CONTROL,
+      USB.LIBUSB_TRANSFER_TYPE_CONTROL,
       1000,
       (error: any, buffer: Buffer, actual: number) => {
         if (error) outTransferPromise?.reject?.(error);
@@ -871,12 +417,12 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       events.removeListener('data', handler);
     };
   }
-  function onError(handler: (err: usb.LibUSBException) => void) {
+  function onError(handler: (err: USB.LibUSBException) => void) {
     events.on('error', handler);
     return () => {
       events.removeListener('error', handler);
     };
   }
 
-  return { onStatus, onData, onError, write, read, start, close };
+  return { onStatus, onData, onError, write, read, close };
 }

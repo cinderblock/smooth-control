@@ -5,11 +5,7 @@
   "main": "dist/SmoothControl.js",
   "types": "dist/SmoothControl.d.ts",
   "files": [
-    "dist/utils/clipRange.js",
-    "dist/utils/Debug.js",
-    "dist/utils/Debug.d.ts",
-    "dist/SmoothControl.js",
-    "dist/SmoothControl.d.ts"
+    "dist/**"
   ],
   "repository": "https://github.com/cinderblock/smooth-control.git",
   "author": "Cameron Tacklind <cameron@tacklind.com> (http://cameron.tacklind.com)",
