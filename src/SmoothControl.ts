@@ -1,4 +1,4 @@
-import EventEmitter = require('events');
+import { EventEmitter } from 'events';
 import * as USB from 'usb';
 import TypedEventEmitter from 'typed-emitter';
 import clipRange from './utils/clipRange';
