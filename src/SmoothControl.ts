@@ -218,7 +218,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     }
 
     endpoint.on('error', err => {
-      if (err.errno == 4) return;
+      if (err.errno == USB.LIBUSB_TRANSFER_STALL) return;
 
       events.emit('error', err);
     });
@@ -256,7 +256,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       endpoint.transfer(reportLength, (err, data) => {
         if (
           err ||
-          // && err.errno != 4
+          // && err.errno != USB.LIBUSB_TRANSFER_STALL
           !data
         ) {
           warning('Rejected trying to receive.', data);
