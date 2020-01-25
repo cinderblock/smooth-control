@@ -189,16 +189,20 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     const inDataObject = {} as ReadData;
 
     const inTransfer = endpoint.makeTransfer(1000, (error: Error & { errno: number }, buf: Buffer, actual: number) => {
-      if (error && error.errno != 4) {
-        events.emit('error', error);
+      if (error) {
+        if (error.errno != USB.LIBUSB_TRANSFER_STALL) {
+          events.emit('error', error);
 
-        return;
-      }
-
-      try {
-        events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
-      } catch (e) {
-        events.emit('error', e);
+          return;
+        } else {
+          // LIBUSB_TRANSFER_STALL
+        }
+      } else {
+        try {
+          events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
+        } catch (e) {
+          events.emit('error', e);
+        }
       }
 
       if (polling) doInTransfer();
