@@ -205,16 +205,16 @@ export default function USBInterface(serial: string, options?: Options): USBInte
         }
       }
 
-      if (polling) doInTransfer();
+      if (polling) startInTransfer();
     });
 
     // TODO: Use this function for non-polling reading of data
-    function doInTransfer() {
+    function startInTransfer() {
       inTransfer.submit(inBuffer);
     }
 
     if (polling) {
-      doInTransfer();
+      startInTransfer();
     }
 
     endpoint.on('error', err => {
