@@ -224,7 +224,11 @@ export function isNormalState(data: ReadData): data is NormalData & CommonData {
  * @param data Raw block of bytes from a motor packet
  */
 export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
-  if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
+  if (data.length != reportLength) {
+    const e = new Error('Invalid data. Refusing to parse') as Error & { data: Buffer };
+    e.data = data;
+    throw e;
+  }
 
   let readPosition = 0;
   function read(length: number, signed: boolean = false) {
