@@ -339,7 +339,7 @@ mkdirp@^0.5.1:
 
 "mlx90363@https://github.com/cinderblock/node-MLX90363.git":
   version "0.0.0"
-  resolved "https://github.com/cinderblock/node-MLX90363.git#9c9eb67eefdc25eae9da95fc6b39e85651fb1a33"
+  resolved "https://github.com/cinderblock/node-MLX90363.git#04777278b6e7982033f0ba6882c0ad9c604df1f4"
 
 nan@2.13.2:
   version "2.13.2"
