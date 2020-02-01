@@ -221,6 +221,8 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       if (err.errno == USB.LIBUSB_TRANSFER_STALL) return;
 
       events.emit('error', err);
+
+      onDetach();
     });
 
     events.emit('status', (status = 'connected'));
