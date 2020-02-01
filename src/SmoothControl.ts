@@ -74,7 +74,7 @@ interface USBInterface {
   read: () => false | Promise<ReadData>;
 
   /**
-   * Close this connection
+   * Close the current connection and stop looking for this serial
    */
   close: () => void;
 }
@@ -101,7 +101,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
 
   options = options || {};
 
-  const polling = (options.polling === undefined || options.polling === true ? 3 : options.polling) || 0;
+  let polling = (options.polling === undefined || options.polling === true ? 3 : options.polling) || 0;
 
   const { info, debug, warning } = DebugFunctions(options.debug);
 
@@ -234,7 +234,20 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     const dev = device;
 
     if (!polling) dev.close();
-    else endpoint.stopPoll(dev.close);
+    else {
+      events.on('data', () => {
+        dev.close()
+      })
+      polling = 0;
+    }
+
+    const found = motors.find(d => serial == d.serial);
+    if (found) {
+      found.consumer = undefined;
+      found.device = undefined;
+    } else {
+      throw new Error('How is the device not found?')
+    }
   }
 
   function onDetach() {
