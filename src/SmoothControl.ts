@@ -62,7 +62,7 @@ export interface USBInterface {
   /**
    * Handle errors that happen
    */
-  onError: (handler: (err: USB.LibUSBException) => void) => () => void;
+  onError: (handler: (err: USB.LibUSBException | Error) => void) => () => void;
 
   /**
    * Efficient manual write. Do not call before previous write has finished.
@@ -188,7 +188,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
 
     const inDataObject = {} as ReadData;
 
-    const inTransfer = endpoint.makeTransfer(1000, (error: Error & { errno: number }, buf: Buffer, actual: number) => {
+    const inTransfer = endpoint.makeTransfer(1000, (error: USB.LibUSBException, buf: Buffer, actual: number) => {
       if (error) {
         if (error.errno != USB.LIBUSB_TRANSFER_STALL) {
           events.emit('error', error);
@@ -414,7 +414,8 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       events.removeListener('data', handler);
     };
   }
-  function onError(handler: (err: USB.LibUSBException) => void) {
+
+  function onError(handler: (err: USB.LibUSBException | Error) => void) {
     events.on('error', handler);
     return () => {
       events.removeListener('error', handler);
