@@ -48,7 +48,7 @@ type Options = {
   polling?: number | boolean;
 };
 
-interface USBInterface {
+export interface USBInterface {
   /**
    * Get notified on motor disconnect
    */
