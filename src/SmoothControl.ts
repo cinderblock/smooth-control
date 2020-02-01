@@ -236,8 +236,8 @@ export default function USBInterface(serial: string, options?: Options): USBInte
     if (!polling) dev.close();
     else {
       events.on('data', () => {
-        dev.close()
-      })
+        dev.close();
+      });
       polling = 0;
     }
 
@@ -246,7 +246,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       found.consumer = undefined;
       found.device = undefined;
     } else {
-      throw new Error('How is the device not found?')
+      throw new Error('How is the device not found?');
     }
   }
 
