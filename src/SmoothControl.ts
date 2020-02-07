@@ -240,6 +240,9 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       events.on('data', () => {
         dev.close();
       });
+      events.once('error', () => {
+        dev.close();
+      });
       polling = 0;
     }
 
