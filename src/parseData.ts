@@ -192,6 +192,10 @@ export type NormalData = {
 
   controlLoops: number;
   mlxCRCFailures: number;
+
+  extra4: number;
+  extra2: number;
+  extra1: number;
 };
 
 export type CommonData = {
@@ -284,6 +288,10 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
 
       normalData.controlLoops = read(2);
       normalData.mlxCRCFailures = read(2);
+
+      normalData.extra4 = read(4, true);
+      normalData.extra2 = read(2, true);
+      normalData.extra1 = read(1, true);
       break;
   }
 
