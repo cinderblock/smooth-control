@@ -134,7 +134,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
   sendBuffer.writeUInt16LE(0, 4);
   sendBuffer.writeUInt16LE(writeBuffer.length, 6);
 
-  const found = motors.find(d => serial == d.serial);
+  const found = motors.find((d) => serial == d.serial);
   if (found) {
     if (found.consumer) {
       throw new Error("Can't have two consumers of the same serial number: " + serial);
@@ -217,7 +217,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       startInTransfer();
     }
 
-    endpoint.on('error', err => {
+    endpoint.on('error', (err) => {
       if (err.errno == USB.LIBUSB_TRANSFER_STALL) return;
 
       events.emit('error', err);
@@ -243,7 +243,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       polling = 0;
     }
 
-    const found = motors.find(d => serial == d.serial);
+    const found = motors.find((d) => serial == d.serial);
     if (found) {
       found.consumer = undefined;
       found.device = undefined;
