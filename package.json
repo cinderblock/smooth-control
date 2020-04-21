@@ -10,6 +10,9 @@
   "repository": "https://github.com/cinderblock/smooth-control.git",
   "author": "Cameron Tacklind <cameron@tacklind.com> (http://cameron.tacklind.com)",
   "license": "MIT",
+  "engines": {
+    "npm": "please use yarn"
+  },
   "scripts": {
     "build": "tsc",
     "checkSources": "tsc --noemit",
