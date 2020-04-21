@@ -90,6 +90,31 @@ export type Command =
   | SynchronousCommand
   | BootloaderCommand;
 
+export function isClearFaultCommand(command: Command): command is ClearFaultCommand {
+  return command.mode == CommandMode.ClearFault;
+}
+export function isMLXCommand(command: Command): command is MLXCommand {
+  return command.mode == CommandMode.MLXDebug;
+}
+export function isThreePhaseCommand(command: Command): command is ThreePhaseCommand {
+  return command.mode == CommandMode.ThreePhase;
+}
+export function isCalibrationCommand(command: Command): command is CalibrationCommand {
+  return command.mode == CommandMode.Calibration;
+}
+export function isPushCommand(command: Command): command is PushCommand {
+  return command.mode == CommandMode.Push;
+}
+export function isServoCommand(command: Command): command is ServoCommand {
+  return command.mode == CommandMode.Servo;
+}
+export function isSynchronousCommand(command: Command): command is SynchronousCommand {
+  return command.mode == CommandMode.SynchronousDrive;
+}
+export function isBootloaderCommand(command: Command): command is BootloaderCommand {
+  return command.mode == CommandMode.Bootloader;
+}
+
 // Matches main.hpp State
 export enum ControllerState {
   Fault,
