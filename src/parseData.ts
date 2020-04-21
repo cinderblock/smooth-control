@@ -54,7 +54,7 @@ export type PushCommand = {
 export type ServoCommand = {
   mode: CommandMode.Servo;
   command: number;
-  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD';
+  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD' | 'amplitudeLimit';
 };
 
 export type SynchronousCommand = {

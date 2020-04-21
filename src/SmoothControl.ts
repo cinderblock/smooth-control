@@ -358,6 +358,8 @@ export default function USBInterface(serial: string, options?: Options): USBInte
 
             synchronousAmplitude: 98,
             synchronousVelocity: 99,
+
+            amplitudeLimit: 199,
           };
 
           writeNumberToBuffer(PWMMode[command.pwmMode]);
