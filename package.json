@@ -19,15 +19,15 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
-    "@types/node": "^13.5.0",
+    "@types/node": "^13.13.1",
     "@types/usb": "^1.5.1",
-    "prettier": "^1.19.1",
-    "tslint": "^6.0.0",
-    "typescript": "^3.7.5"
+    "prettier": "^2.0.4",
+    "tslint": "^6.1.1",
+    "typescript": "^3.8.3"
   },
   "dependencies": {
     "mlx90363": "https://github.com/cinderblock/node-MLX90363.git",
-    "typed-emitter": "^0.2.0",
-    "usb": "^1.6.2"
+    "typed-emitter": "^1.0.0",
+    "usb": "^1.6.3"
   }
 }
