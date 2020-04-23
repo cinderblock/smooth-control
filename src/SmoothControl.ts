@@ -6,6 +6,7 @@ import DebugFunctions, { DebugOptions } from './utils/Debug';
 import { SharedPromise } from './utils/SharedPromise';
 import { motors } from './ConnectedMotorManager';
 import { ReadData, Command, reportLength, parseHostDataIN, CommandMode } from './parseData';
+import { validateNumber } from './utils/validateNumber';
 
 export {
   CommandMode,
@@ -324,25 +325,29 @@ export default function USBInterface(serial: string, options?: Options): USBInte
           break;
 
         case CommandMode.ThreePhase:
-          if (command.A === undefined) throw new Error('Argument `A` missing');
-          if (command.B === undefined) throw new Error('Argument `B` missing');
-          if (command.C === undefined) throw new Error('Argument `C` missing');
+          {
+            const max = 1 << 11;
+            validateNumber('A', command.A, max);
+            validateNumber('B', command.B, max);
+            validateNumber('C', command.C, max);
 
-          writeNumberToBuffer(command.A, 2);
-          writeNumberToBuffer(command.B, 2);
-          writeNumberToBuffer(command.C, 2);
+            writeNumberToBuffer(command.A, 2);
+            writeNumberToBuffer(command.B, 2);
+            writeNumberToBuffer(command.C, 2);
+          }
           break;
 
         case CommandMode.Calibration:
-          if (command.angle === undefined) throw new Error('Argument `angle` missing');
-          if (command.amplitude === undefined) throw new Error('Argument `amplitude` missing');
+          validateNumber('angle', command.angle, StepsPerCycle);
+          validateNumber('amplitude', command.amplitude, 256);
 
           writeNumberToBuffer(command.angle, 2);
           writeNumberToBuffer(command.amplitude, 1);
           break;
 
         case CommandMode.Push:
-          if (command.command === undefined) throw new Error('Argument `command` missing');
+          validateNumber('command', command.command, -255, 256);
+
           writeNumberToBuffer(command.command, 2, true);
           break;
 
@@ -394,7 +399,12 @@ export default function USBInterface(serial: string, options?: Options): USBInte
           break;
 
         case CommandMode.SynchronousDrive:
-          writeNumberToBuffer(command.amplitude, 1, true);
+          validateNumber('amplitude', command.amplitude, 256);
+
+          // TODO: smaller range?
+          validateNumber('velocity', command.velocity, 1 << 31, true);
+
+          writeNumberToBuffer(command.amplitude);
           writeNumberToBuffer(command.velocity, 4, true);
           break;
       }
