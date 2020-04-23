@@ -213,11 +213,39 @@ export enum MlxResponseState {
   Other,
 }
 
-export type FaultData = {
+export type InitData = {
   state: ControllerState.Fault;
+  fault: ControllerFault.Init;
 
-  fault: ControllerFault;
+  cyclesPerRevolution: number;
+
+  deadTimes: {
+    rising: number;
+    falling: number;
+  };
+
+  currentLimit: number;
+
+  calibration?: {
+    version: number;
+    time: number;
+  };
 };
+
+export type OtherFaults = {
+  state: ControllerState.Fault;
+  fault: Exclude<ControllerFault, ControllerFault.Init>;
+};
+
+export type FaultData = InitData | OtherFaults;
+
+export function isInitData(data: FaultData): data is InitData {
+  return data.fault == ControllerFault.Init;
+}
+
+export function isOtherFaults(data: FaultData): data is OtherFaults {
+  return !isInitData(data);
+}
 
 export type ManualData = {
   state: ControllerState.Manual;
@@ -347,8 +375,30 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
 
   switch (ret.state) {
     case ControllerState.Fault:
-      const faultData: FaultData = ret;
-      faultData.fault = read(1);
+      {
+        const faultData: FaultData = ret;
+        faultData.fault = read(1);
+        if (isInitData(faultData)) {
+          faultData.cyclesPerRevolution = read(1);
+
+          const cal = !!read(1);
+
+          const deadTimes = read(1);
+
+          faultData.deadTimes = {
+            rising: deadTimes >> 4,
+            falling: deadTimes & 0xf,
+          };
+
+          faultData.currentLimit = read(2);
+
+          if (cal) {
+            const version = read(1);
+            const time = read(6); // we leave 2 MSB on the table
+            faultData.calibration = { version, time };
+          }
+        }
+      }
       break;
 
     case ControllerState.Manual:
