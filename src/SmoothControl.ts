@@ -5,7 +5,7 @@ import clipRange from './utils/clipRange';
 import DebugFunctions, { DebugOptions } from './utils/Debug';
 import { SharedPromise } from './utils/SharedPromise';
 import { motors } from './ConnectedMotorManager';
-import { ReadData, Command, reportLength, parseHostDataIN, CommandMode, ServoMode } from './parseData';
+import { ReadData, Command, reportLength, parseHostDataIN, CommandMode, ServoMode, MultiTurn } from './parseData';
 import { validateNumber } from './utils/validateNumber';
 
 export {
@@ -24,6 +24,8 @@ export {
   isServoVelocityCommand,
   isServoPositionCommand,
   ServoCommand,
+  MultiTurn,
+  kPID,
   SynchronousCommand,
   BootloaderCommand,
   Command,
@@ -79,6 +81,23 @@ type Options = {
   debug?: DebugOptions;
   polling?: number | boolean;
 };
+
+export function MultiTurnFromNumber(pos: number, CyclesPerRevolution: number): MultiTurn {
+  const ret = {} as MultiTurn;
+
+  const div = CyclesPerRevolution * StepsPerCycle;
+
+  ret.commutation = pos % div;
+
+  ret.turns = pos / div;
+
+  if (ret.commutation < 0) {
+    ret.commutation += div;
+    ret.turns--;
+  }
+
+  return ret;
+}
 
 export interface USBInterface {
   /**

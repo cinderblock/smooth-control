@@ -72,21 +72,7 @@ export type ServoAmplitudeCommand = ServoCommandBase<ServoMode.Amplitude> & {
   command: number;
 };
 
-export type ServoVelocityCommand = ServoCommandBase<ServoMode.Velocity> & {
-  // TODO: Implement
-};
-
-export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> & {
-  /**
-   * @range [0, StepsPerRevolution)
-   */
-  commutation: number;
-
-  /**
-   * @range s4
-   */
-  turns: number;
-
+export type kPID = {
   /**
    * Always negative (transmitted as positive integer)
    * @range u2
@@ -105,6 +91,24 @@ export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> & {
    */
   kD: number;
 };
+
+export type ServoVelocityCommand = ServoCommandBase<ServoMode.Velocity> & {
+  // TODO: Implement
+};
+
+export type MultiTurn = {
+  /**
+   * @range [0, StepsPerRevolution)
+   */
+  commutation: number;
+
+  /**
+   * @range s4
+   */
+  turns: number;
+};
+
+export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> & MultiTurn & kPID;
 
 export type ServoCommand = ServoDisabledCommand | ServoAmplitudeCommand | ServoVelocityCommand | ServoPositionCommand;
 
