@@ -42,8 +42,7 @@ export {
 export { addAttachListener, start } from './ConnectedMotorManager';
 
 // Make melexis sub module easily accessible to others
-import * as MLX from 'mlx90363';
-export const Melexis = MLX;
+export * as Melexis from 'mlx90363';
 
 interface Events {
   status: (status: 'missing' | 'connected') => void;
