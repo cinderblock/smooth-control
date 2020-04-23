@@ -5,7 +5,7 @@ import clipRange from './utils/clipRange';
 import DebugFunctions, { DebugOptions } from './utils/Debug';
 import { SharedPromise } from './utils/SharedPromise';
 import { motors } from './ConnectedMotorManager';
-import { ReadData, Command, reportLength, parseHostDataIN, CommandMode } from './parseData';
+import { ReadData, Command, reportLength, parseHostDataIN, CommandMode, ServoMode } from './parseData';
 import { validateNumber } from './utils/validateNumber';
 
 export {
@@ -15,6 +15,14 @@ export {
   ThreePhaseCommand,
   CalibrationCommand,
   PushCommand,
+  ServoDisabledCommand,
+  ServoAmplitudeCommand,
+  ServoVelocityCommand,
+  ServoPositionCommand,
+  isServoDisabledCommand,
+  isServoAmplitudeCommand,
+  isServoVelocityCommand,
+  isServoPositionCommand,
   ServoCommand,
   SynchronousCommand,
   BootloaderCommand,
@@ -44,6 +52,22 @@ export { addAttachListener, start } from './ConnectedMotorManager';
 
 // Make melexis sub module easily accessible to others
 export * as Melexis from 'mlx90363';
+
+/**
+ * Internal granularity of sin wave for each phase
+ */
+const StepsPerPhase = 256;
+
+/**
+ * One for each of A, B, and C.
+ */
+const PhasesPerCycle = 3;
+
+/**
+ * One Cycle is one full commutation (aka electrical revolution) of the motor.
+ * This is almost certainly not one actual revolution of the motor shaft.
+ */
+const StepsPerCycle = StepsPerPhase * PhasesPerCycle;
 
 interface Events {
   status: (status: 'missing' | 'connected') => void;
@@ -352,50 +376,38 @@ export default function USBInterface(serial: string, options?: Options): USBInte
           break;
 
         case CommandMode.Servo:
-          if (command.command === undefined) throw new Error('Argument `command` missing');
-          if (command.pwmMode === undefined) throw new Error('Argument `pwmMode` missing');
+          validateNumber('servoMode', command.servoMode, Object.keys(ServoMode).length);
 
-          // CommandMode::Servo
-          const PWMMode = {
-            pwm: 1, // Set pwm Mode
-            position: 2, // setPosition
-            velocity: 3, // setVelocity
-            spare: 4, // Spare Mode
-            command: 1, // setAmplitude  // this is redundant to pwmMode
-            // Here we set the control parameters.
-            // Note that these are all u1 numbers
-            kP: 11, // in USBInterface.cpp, send a Proportional Gain constant
-            kI: 12,
-            kD: 13,
+          writeNumberToBuffer(command.servoMode);
 
-            synchronousAmplitude: 98,
-            synchronousVelocity: 99,
-
-            amplitudeLimit: 199,
-          };
-
-          writeNumberToBuffer(PWMMode[command.pwmMode]);
-          switch (command.pwmMode) {
-            case 'kP': // case 11: in USBInterface.cpp, send a Proportional Gain constant
-            case 'kI': // case 12:
-            case 'kD': // case 13:
-              command.command &= 0xffff;
-              break;
-            case 'pwm': // case 1: Set pwm Mode
-            case 'command': // case 1: setAmplitude  // this is redundant to pwmMode
-              command.command = clipRange(-255, 255)(command.command);
-              break;
-            case 'position': // case 2: setPosition
-            case 'velocity': // case 3: setVelocity
-            case 'spare': // case 4: Set Spare Mode
-              break;
-
-            // Just in case
+          switch (command.servoMode) {
             default:
-              command.command = 0;
+              throw new Error('Invalid servo mode');
+
+            case ServoMode.Disabled:
+              break;
+
+            case ServoMode.Amplitude:
+              validateNumber('command', command.command, -255, 256);
+              break;
+
+            case ServoMode.Velocity:
+              break;
+
+            case ServoMode.Position:
+              validateNumber('commutation', command.commutation, 1 << 16);
+              validateNumber('turns', command.turns, 1 << 31, true);
+              validateNumber('kP', command.kP, 1 << 16);
+              validateNumber('kI', command.kI, 1 << 16);
+              validateNumber('kD', command.kD, 1 << 16);
+
+              writeNumberToBuffer(command.commutation, 2);
+              writeNumberToBuffer(command.turns, 4, true);
+              writeNumberToBuffer(command.kP, 2);
+              writeNumberToBuffer(command.kI, 2);
+              writeNumberToBuffer(command.kD, 2);
               break;
           }
-          writeNumberToBuffer(command.command, 4, true);
           break;
 
         case CommandMode.SynchronousDrive:

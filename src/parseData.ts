@@ -51,11 +51,75 @@ export type PushCommand = {
   command: number;
 };
 
-export type ServoCommand = {
+export enum ServoMode {
+  Disabled = 0,
+  Amplitude = 1,
+  Velocity = 2,
+  Position = 3,
+}
+
+type ServoCommandBase<mode extends ServoMode> = {
   mode: CommandMode.Servo;
-  command: number;
-  pwmMode: 'pwm' | 'position' | 'velocity' | 'spare' | 'command' | 'kP' | 'kI' | 'kD' | 'amplitudeLimit';
+  servoMode: mode;
 };
+
+export type ServoDisabledCommand = ServoCommandBase<ServoMode.Disabled>;
+
+export type ServoAmplitudeCommand = ServoCommandBase<ServoMode.Amplitude> & {
+  /**
+   * @range [-255, 255]
+   */
+  command: number;
+};
+
+export type ServoVelocityCommand = ServoCommandBase<ServoMode.Velocity> & {
+  // TODO: Implement
+};
+
+export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> & {
+  /**
+   * @range [0, StepsPerRevolution)
+   */
+  commutation: number;
+
+  /**
+   * @range s4
+   */
+  turns: number;
+
+  /**
+   * Always negative (transmitted as positive integer)
+   * @range u2
+   */
+  kP: number;
+
+  /**
+   * Always negative (transmitted as positive integer)
+   * @range u2
+   */
+  kI: number;
+
+  /**
+   * Always negative (transmitted as positive integer)
+   * @range u2
+   */
+  kD: number;
+};
+
+export type ServoCommand = ServoDisabledCommand | ServoAmplitudeCommand | ServoVelocityCommand | ServoPositionCommand;
+
+export function isServoDisabledCommand(cmd: ServoCommand): cmd is ServoDisabledCommand {
+  return cmd.servoMode == ServoMode.Disabled;
+}
+export function isServoAmplitudeCommand(cmd: ServoCommand): cmd is ServoAmplitudeCommand {
+  return cmd.servoMode == ServoMode.Amplitude;
+}
+export function isServoVelocityCommand(cmd: ServoCommand): cmd is ServoVelocityCommand {
+  return cmd.servoMode == ServoMode.Velocity;
+}
+export function isServoPositionCommand(cmd: ServoCommand): cmd is ServoPositionCommand {
+  return cmd.servoMode == ServoMode.Position;
+}
 
 export type SynchronousCommand = {
   mode: CommandMode.SynchronousDrive;
