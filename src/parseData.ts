@@ -219,26 +219,21 @@ export type FaultData = {
   fault: ControllerFault;
 };
 
-type GoodMlxResponse = {
-  mlxDataValid: true;
-
-  mlxResponse: Buffer;
-  mlxResponseState: MlxResponseState;
-  mlxParsedResponse: Messages | string;
-};
-
-type BadMlxResponse = {
-  mlxDataValid: false;
-};
-
 export type ManualData = {
   state: ControllerState.Manual;
+
+  /**
+   * Motor position, as driven
+   * @units motor counts
+   */
+  drivePosition: number;
 
   /**
    * Motor position
    * @units motor counts
    */
-  position: number;
+  realPosition: number;
+
   /**
    * Not yet implemented
    */
@@ -250,7 +245,11 @@ export type ManualData = {
    * @range [0, 255]
    */
   amplitude: number;
-} & (GoodMlxResponse | BadMlxResponse);
+
+  mlxResponse: Buffer;
+  mlxResponseState: MlxResponseState;
+  mlxParsedResponse?: Messages | string;
+};
 
 export type NormalData = {
   state: ControllerState.Normal;
@@ -260,6 +259,9 @@ export type NormalData = {
    * @units motor counts
    */
   position: number;
+
+  multi: MultiTurn;
+
   /**
    * Velocity estimate
    *
@@ -281,14 +283,14 @@ export type NormalData = {
    */
   amplitude: number;
 
-  calibrated: boolean; // lookupValid;
-
   controlLoops: number;
   mlxCRCFailures: number;
 
-  extra4: number;
-  extra2: number;
-  extra1: number;
+  /**
+   * The last few, currently unused, bytes in the packet.
+   * Sometimes used in development.
+   */
+  extra: Buffer;
 };
 
 export type CommonData = {
@@ -351,44 +353,38 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
 
     case ControllerState.Manual:
       const manualData: ManualData = ret;
-      manualData.position = read(2);
+      manualData.drivePosition = read(2);
+      manualData.realPosition = read(2);
       manualData.velocity = read(4, true);
-      // Skip sign bit that we know is always 0 in ManualData
-      readPosition++;
+
       manualData.amplitude = read(1);
 
-      manualData.mlxDataValid = !!read(1);
+      manualData.mlxResponseState = read(1);
 
-      if (manualData.mlxDataValid) {
-        const res = readBuffer(8);
-        manualData.mlxResponseState = read(1);
+      manualData.mlxResponse = readBuffer(8);
 
-        if (manualData.mlxResponseState > MlxResponseState.Ready) {
-          manualData.mlxResponse = res;
-          manualData.mlxParsedResponse = parseMLX(res);
-        }
+      if (manualData.mlxResponseState > MlxResponseState.Received) {
+        manualData.mlxParsedResponse = parseMLX(manualData.mlxResponse);
       }
 
       break;
 
     case ControllerState.Normal:
       const normalData: NormalData = ret;
-      normalData.position = read(2);
+      normalData.multi = {} as MultiTurn;
+      normalData.multi.commutation = read(2);
+      normalData.multi.turns = read(4, true);
       normalData.velocity = read(2, true);
       normalData.amplitude = (!!read(1) ? 1 : -1) * read(1);
-
-      normalData.calibrated = !!read(1);
 
       normalData.controlLoops = read(2);
       normalData.mlxCRCFailures = read(2);
 
-      normalData.extra4 = read(4, true);
-      normalData.extra2 = read(2, true);
-      normalData.extra1 = read(1, true);
+      normalData.extra = readBuffer(4);
       break;
   }
 
-  readPosition = 1 + Math.max(1, 18, 11);
+  readPosition = 1 + Math.max(1, 18, 14);
 
   ret.cpuTemp = read(2);
   ret.current = read(2, true);
