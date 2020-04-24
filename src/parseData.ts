@@ -433,6 +433,7 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
       normalData.multi = {} as MultiTurn;
       normalData.multi.commutation = read(2);
       normalData.multi.turns = read(4, true);
+
       normalData.velocity = read(2, true);
       normalData.amplitude = (!!read(1) ? 1 : -1) * read(1);
 
@@ -443,7 +444,7 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
       break;
   }
 
-  readPosition = 1 + Math.max(1, 18, 14);
+  readPosition = 1 + Math.max(15, 18, 14);
 
   ret.cpuTemp = read(2);
   ret.current = read(2, true);
