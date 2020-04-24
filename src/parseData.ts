@@ -378,25 +378,32 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
       {
         const faultData: FaultData = ret;
         faultData.fault = read(1);
-        if (isInitData(faultData)) {
-          faultData.cyclesPerRevolution = read(1);
 
-          const cal = !!read(1);
+        switch (faultData.fault) {
+          default:
+            break;
 
-          const deadTimes = read(1);
+          case ControllerFault.Init:
+            // (isInitData(faultData)) {
+            faultData.cyclesPerRevolution = read(1);
 
-          faultData.deadTimes = {
-            rising: deadTimes >> 4,
-            falling: deadTimes & 0xf,
-          };
+            const cal = !!read(1);
 
-          faultData.currentLimit = read(2);
+            const deadTimes = read(1);
 
-          if (cal) {
-            const version = read(1);
-            const time = read(6); // we leave 2 MSB on the table
-            faultData.calibration = { version, time };
-          }
+            faultData.deadTimes = {
+              rising: deadTimes >> 4,
+              falling: deadTimes & 0xf,
+            };
+
+            faultData.currentLimit = read(2);
+
+            if (cal) {
+              const version = read(1);
+              const time = read(6); // we leave 2 MSB on the table
+              faultData.calibration = { version, time };
+            }
+          // }
         }
       }
       break;
