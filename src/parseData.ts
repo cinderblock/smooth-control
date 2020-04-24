@@ -413,8 +413,10 @@ export function parseHostDataIN(data: Buffer, ret = {} as ReadData): ReadData {
 
       manualData.mlxResponse = readBuffer(8);
 
-      if (manualData.mlxResponseState > MlxResponseState.Received) {
+      if (manualData.mlxResponseState > MlxResponseState.failedCRC) {
         manualData.mlxParsedResponse = parseMLX(manualData.mlxResponse);
+      } else {
+        delete manualData.mlxParsedResponse;
       }
 
       break;
