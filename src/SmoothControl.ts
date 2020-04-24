@@ -1,12 +1,24 @@
 import { EventEmitter } from 'events';
 import * as USB from 'usb';
 import TypedEventEmitter from 'typed-emitter';
-import clipRange from './utils/clipRange';
+
 import DebugFunctions, { DebugOptions } from './utils/Debug';
 import { SharedPromise } from './utils/SharedPromise';
-import { motors } from './ConnectedMotorManager';
-import { ReadData, Command, reportLength, parseHostDataIN, CommandMode, ServoMode, MultiTurn } from './parseData';
 import { validateNumber } from './utils/validateNumber';
+
+import { motors } from './ConnectedMotorManager';
+import {
+  ReadData,
+  Command,
+  reportLength,
+  parseHostDataIN,
+  CommandMode,
+  ServoMode,
+  MultiTurn,
+  isFaultState,
+  isInitData,
+  isNormalState,
+} from './parseData';
 
 export {
   CommandMode,
@@ -154,6 +166,8 @@ interface Transfer {
 export default function USBInterface(serial: string, options?: Options): USBInterface {
   if (!serial) throw new Error('Invalid ID');
 
+  let CyclesPerRevolution: number;
+
   options = options || {};
 
   let polling = (options.polling === undefined || options.polling === true ? 3 : options.polling) || 0;
@@ -254,6 +268,11 @@ export default function USBInterface(serial: string, options?: Options): USBInte
         }
       } else {
         try {
+          parseHostDataIN(buf.slice(0, actual), inDataObject);
+          if (CyclesPerRevolution !== undefined && isNormalState(inDataObject)) {
+            inDataObject.position =
+              inDataObject.multi.turns * CyclesPerRevolution * StepsPerCycle + inDataObject.multi.commutation;
+          }
           events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
         } catch (e) {
           events.emit('error', e);
@@ -331,7 +350,13 @@ export default function USBInterface(serial: string, options?: Options): USBInte
         ) {
           warning('Rejected trying to receive.', data);
           reject(err);
-        } else resolve(parseHostDataIN(data));
+        } else {
+          const ret = parseHostDataIN(data);
+          if (CyclesPerRevolution !== undefined && isNormalState(ret)) {
+            ret.position = ret.multi.turns * CyclesPerRevolution * StepsPerCycle + ret.multi.commutation;
+          }
+          resolve(ret);
+        }
       });
     });
   }
@@ -477,6 +502,13 @@ export default function USBInterface(serial: string, options?: Options): USBInte
       events.removeListener('error', handler);
     };
   }
+
+  const initCyclesPerRevolutionOnce = onData((data) => {
+    if (!isFaultState(data)) return;
+    if (!isInitData(data)) return;
+    CyclesPerRevolution = data.cyclesPerRevolution;
+    initCyclesPerRevolutionOnce();
+  });
 
   return { onStatus, onData, onError, write, read, close };
 }
