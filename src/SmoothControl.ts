@@ -105,7 +105,7 @@ export function MultiTurnFromNumber(pos: number, CyclesPerRevolution: number): M
 
   ret.commutation = pos % div;
 
-  ret.turns = pos / div;
+  ret.turns = ~~(pos / div);
 
   if (ret.commutation < 0) {
     ret.commutation += div;
