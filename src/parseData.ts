@@ -286,7 +286,7 @@ export type NormalData = {
    * Motor position
    * @units motor counts
    */
-  position: number;
+  position?: number;
 
   multi: MultiTurn;
 
