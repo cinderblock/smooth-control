@@ -85,7 +85,7 @@ const PhasesPerCycle = 3;
  * One Cycle is one full commutation (aka electrical revolution) of the motor.
  * This is almost certainly not one actual revolution of the motor shaft.
  */
-const StepsPerCycle = StepsPerPhase * PhasesPerCycle;
+export const StepsPerCycle = StepsPerPhase * PhasesPerCycle;
 
 interface Events {
   status: (status: 'missing' | 'connected') => void;
