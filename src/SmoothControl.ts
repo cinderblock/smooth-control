@@ -286,6 +286,7 @@ export default function USBInterface(serial: string, options?: Options): USBInte
           if (CyclesPerRevolution !== undefined && isNormalState(inDataObject)) {
             // Add some extra automatic position computations
             const mul = CyclesPerRevolution * StepsPerCycle;
+            inDataObject.revolutions = inDataObject.multi.turns + inDataObject.multi.commutation / mul;
             inDataObject.position = inDataObject.multi.turns * mul + inDataObject.multi.commutation;
           }
           events.emit('data', inDataObject);

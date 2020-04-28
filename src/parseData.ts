@@ -284,6 +284,12 @@ export type NormalData = {
 
   /**
    * Motor position
+   * @units motor revolutions
+   */
+  revolutions?: number;
+
+  /**
+   * Motor position
    * @units motor counts
    */
   position?: number;
