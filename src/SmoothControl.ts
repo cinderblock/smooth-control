@@ -32,6 +32,8 @@ export {
   ServoAmplitudeCommand,
   ServoVelocityCommand,
   ServoPositionCommand,
+  ServoPositionCommandMultiTurn,
+  ServoPositionCommandRevolutions,
   isServoDisabledCommand,
   isServoAmplitudeCommand,
   isServoVelocityCommand,

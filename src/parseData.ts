@@ -114,7 +114,12 @@ export function isMultiTurn(multi: any): multi is MultiTurn {
   return true;
 }
 
-export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> & (MultiTurn | { revolutions: number }) & kPID;
+export type ServoPositionCommandBase = ServoCommandBase<ServoMode.Position> & kPID;
+
+export type ServoPositionCommandMultiTurn = ServoPositionCommandBase & MultiTurn;
+export type ServoPositionCommandRevolutions = ServoPositionCommandBase & { revolutions: number };
+
+export type ServoPositionCommand = ServoPositionCommandMultiTurn | ServoPositionCommandRevolutions;
 
 export type ServoCommand = ServoDisabledCommand | ServoAmplitudeCommand | ServoVelocityCommand | ServoPositionCommand;
 
