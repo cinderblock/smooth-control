@@ -38,6 +38,7 @@ export {
   isServoAmplitudeCommand,
   isServoVelocityCommand,
   isServoPositionCommand,
+  ServoMode,
   ServoCommand,
   MultiTurn,
   kPID,
