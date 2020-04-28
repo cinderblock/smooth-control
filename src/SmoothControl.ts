@@ -18,6 +18,7 @@ import {
   isFaultState,
   isInitData,
   isNormalState,
+  isMultiTurn,
 } from './parseData';
 
 export {
@@ -459,14 +460,38 @@ export default function USBInterface(serial: string, options?: Options): USBInte
               break;
 
             case ServoMode.Position:
-              validateNumber('commutation', command.commutation, 1 << 16);
-              validateNumber('turns', command.turns, 1 << 31, true);
+              let commutation: number;
+              let turns: number;
+
+              if (isMultiTurn(command)) {
+                commutation = command.commutation;
+                turns = command.turns;
+              } else {
+                if (!CyclesPerRevolution) throw new Error('CyclesPerRevolution unknown!');
+                const max = CyclesPerRevolution * StepsPerCycle;
+
+                const revs = command.revolutions;
+
+                validateNumber('revolutions', revs, 1 << 31, true);
+
+                turns = Math.floor(revs);
+
+                // We could use floor instead and not need the next part, but I think this is more correct
+                commutation = Math.round((revs - turns) * max);
+                while (commutation >= max) {
+                  commutation -= max;
+                  turns++;
+                }
+              }
+
+              validateNumber('commutation', commutation, 1 << 16);
+              validateNumber('turns', turns, 1 << 31, true);
               validateNumber('kP', command.kP, 1 << 16);
               validateNumber('kI', command.kI, 1 << 16);
               validateNumber('kD', command.kD, 1 << 16);
 
-              writeNumberToBuffer(command.commutation, 2);
-              writeNumberToBuffer(command.turns, 4, true);
+              writeNumberToBuffer(commutation, 2);
+              writeNumberToBuffer(turns, 4, true);
               writeNumberToBuffer(command.kP, 2);
               writeNumberToBuffer(command.kI, 2);
               writeNumberToBuffer(command.kD, 2);
