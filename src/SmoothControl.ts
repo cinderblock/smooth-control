@@ -284,10 +284,11 @@ export default function USBInterface(serial: string, options?: Options): USBInte
         try {
           parseHostDataIN(buf.slice(0, actual), inDataObject);
           if (CyclesPerRevolution !== undefined && isNormalState(inDataObject)) {
-            inDataObject.position =
-              inDataObject.multi.turns * CyclesPerRevolution * StepsPerCycle + inDataObject.multi.commutation;
+            // Add some extra automatic position computations
+            const mul = CyclesPerRevolution * StepsPerCycle;
+            inDataObject.position = inDataObject.multi.turns * mul + inDataObject.multi.commutation;
           }
-          events.emit('data', parseHostDataIN(buf.slice(0, actual), inDataObject));
+          events.emit('data', inDataObject);
         } catch (e) {
           events.emit('error', e);
         }
