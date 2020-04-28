@@ -98,21 +98,35 @@ type Options = {
   polling?: number | boolean;
 };
 
-export function MultiTurnFromNumber(pos: number, CyclesPerRevolution: number): MultiTurn {
-  const ret = {} as MultiTurn;
+/**
+ * Compute MultiTurn from motor units
+ * @param turns motor revolutions
+ * @param CyclesPerRevolution typical values: 7, 15, and 21 (reported by motor with InitData)
+ */
+export function ComputeCommutationTurns(turns: number, CyclesPerRevolution: number): MultiTurn {
+  let commutation = turns % 1;
 
-  const div = CyclesPerRevolution * StepsPerCycle;
+  turns = ~~turns;
 
-  ret.commutation = pos % div;
-
-  ret.turns = ~~(pos / div);
-
-  if (ret.commutation < 0) {
-    ret.commutation += div;
-    ret.turns--;
+  // Handle negative % returning negative value
+  while (commutation < 0) {
+    commutation += 1;
+    turns--;
   }
 
-  return ret;
+  // Scale to motor units
+  commutation *= CyclesPerRevolution * StepsPerCycle;
+
+  // We could use Math.floor and avoid the following fix, but this seems better
+  commutation = Math.round(commutation);
+
+  // In case the rounding bumps us to a full revolution
+  while (commutation >= CyclesPerRevolution * StepsPerCycle) {
+    commutation -= CyclesPerRevolution * StepsPerCycle;
+    turns++;
+  }
+
+  return { commutation, turns };
 }
 
 export interface USBInterface {
