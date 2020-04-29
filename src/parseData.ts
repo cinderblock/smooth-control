@@ -108,18 +108,28 @@ export type MultiTurn = {
   turns: number;
 };
 
-export function isMultiTurn(multi: any): multi is MultiTurn {
-  if (typeof multi.commutation != 'number') return false;
-  if (typeof multi.turns != 'number') return false;
-  return true;
+export type Position = MultiTurn | { revolutions: number };
+
+export function isMultiTurn(multi: Position): multi is MultiTurn {
+  const m = multi as MultiTurn;
+
+  return typeof m.commutation == 'number' && typeof m.turns == 'number';
 }
 
-export type ServoPositionCommandBase = ServoCommandBase<ServoMode.Position> & kPID;
+type LimitPair<T = number> = {
+  upper: T;
+  lower: T;
+};
 
-export type ServoPositionCommandMultiTurn = ServoPositionCommandBase & MultiTurn;
-export type ServoPositionCommandRevolutions = ServoPositionCommandBase & { revolutions: number };
+export type Limits = {
+  position: LimitPair<Position>;
+  velocity: LimitPair;
+  amplitude: LimitPair;
+};
 
-export type ServoPositionCommand = ServoPositionCommandMultiTurn | ServoPositionCommandRevolutions;
+export type ServoPositionCommand = ServoCommandBase<ServoMode.Position> &
+  Position &
+  kPID & { limits: Omit<Limits, 'position'> };
 
 export type ServoCommand = ServoDisabledCommand | ServoAmplitudeCommand | ServoVelocityCommand | ServoPositionCommand;
 

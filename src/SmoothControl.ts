@@ -32,8 +32,6 @@ export {
   ServoAmplitudeCommand,
   ServoVelocityCommand,
   ServoPositionCommand,
-  ServoPositionCommandMultiTurn,
-  ServoPositionCommandRevolutions,
   isServoDisabledCommand,
   isServoAmplitudeCommand,
   isServoVelocityCommand,
@@ -41,6 +39,8 @@ export {
   ServoMode,
   ServoCommand,
   MultiTurn,
+  isMultiTurn,
+  Position,
   kPID,
   SynchronousCommand,
   BootloaderCommand,
@@ -495,9 +495,20 @@ export default function USBInterface(serial: string, options?: Options): USBInte
 
               writeNumberToBuffer(commutation, 2);
               writeNumberToBuffer(turns, 4, true);
+
               writeNumberToBuffer(command.kP, 2);
               writeNumberToBuffer(command.kI, 2);
               writeNumberToBuffer(command.kD, 2);
+
+              writeNumberToBuffer(command.limits.velocity.upper, 2, true);
+              writeNumberToBuffer(command.limits.velocity.lower, 2, true);
+
+              const u = command.limits.amplitude.upper < 0 ? 0 : 1 << 0;
+              const l = command.limits.amplitude.lower < 0 ? 0 : 1 << 1;
+
+              writeNumberToBuffer(u | l);
+              writeNumberToBuffer(Math.abs(command.limits.amplitude.upper));
+              writeNumberToBuffer(Math.abs(command.limits.amplitude.lower));
               break;
           }
           break;
