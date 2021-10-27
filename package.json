@@ -28,6 +28,6 @@
   "dependencies": {
     "mlx90363": "https://github.com/cinderblock/node-MLX90363.git",
     "typed-emitter": "^1.0.0",
-    "usb": "^1.6.3"
+    "usb": "^1.8.0"
   }
 }
