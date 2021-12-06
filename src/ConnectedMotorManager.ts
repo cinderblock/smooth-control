@@ -16,7 +16,7 @@ async function getMotorSerial(dev: usb.Device) {
   dev.open();
 
   try {
-    const data = await new Promise<Buffer | undefined>((resolve, reject) =>
+    const data = await new Promise<string | undefined>((resolve, reject) =>
       dev.getStringDescriptor(dev.deviceDescriptor.iSerialNumber, (err, result) => {
         if (err) reject(err);
         else resolve(result);
@@ -28,10 +28,7 @@ async function getMotorSerial(dev: usb.Device) {
       dev.close();
       return false;
     }
-    const dataStr = data
-      .toString()
-      .replace(/\0/g, '')
-      .trim();
+    const dataStr = data.replace(/\0/g, '').trim();
 
     // console.log('Found Motor device:', dataStr);
 
