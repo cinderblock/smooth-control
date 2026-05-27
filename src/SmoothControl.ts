@@ -1,14 +1,39 @@
-import EventEmitter = require('events');
-import * as usb from 'usb';
-import * as MLX from 'mlx90363';
-import TypedEventEmitter from 'typed-emitter';
-import clipRange from './utils/clipRange';
-import DebugFunctions, { DebugOptions } from './utils/Debug';
+import { EventEmitter } from 'node:events';
+import {
+  usb,
+  getDeviceList,
+  type Device,
+  type InEndpoint,
+  type LibUSBException,
+} from 'usb';
+import * as MLX from '@cinderblock/mlx90363';
+import clipRange from './utils/clipRange.js';
+import DebugFunctions, { type DebugOptions } from './utils/Debug.js';
+
+// Minimal typed-EventEmitter shape — only the methods we actually use.
+// Inlined to avoid `typed-emitter` v2, whose default-export pattern doesn't
+// import cleanly under NodeNext + esModuleInterop.
+interface TypedEventEmitter<Events> {
+  on<E extends keyof Events>(event: E, listener: Events[E]): this;
+  off<E extends keyof Events>(event: E, listener: Events[E]): this;
+  emit<E extends keyof Events>(
+    event: E,
+    ...args: Events[E] extends (...args: infer A) => unknown ? A : never
+  ): boolean;
+  removeListener<E extends keyof Events>(event: E, listener: Events[E]): this;
+}
+
+// libusb constants — usb@2 doesn't re-export these from the top-level package
+// (they live in usb/dist/usb/bindings, which isn't part of the public API
+// shape). The numeric values are fixed by libusb's libusb.h.
+const LIBUSB_RECIPIENT_INTERFACE = 0x01;
+const LIBUSB_REQUEST_TYPE_CLASS = 0x20;
+const LIBUSB_ENDPOINT_OUT = 0x00;
 
 const deviceVid = 0xdead;
 const devicePid = 0xbeef;
 
-function isDeviceMotorDriver(device: usb.Device) {
+function isDeviceMotorDriver(device: Device) {
   const dec = device.deviceDescriptor;
   const ven = dec.idVendor;
   const prod = dec.idProduct;
@@ -145,7 +170,7 @@ export type ReadData = {
 interface Events {
   status: (status: 'missing' | 'connected') => void;
   data: (data: ReadData) => void;
-  error: (err: usb.LibUSBException) => void;
+  error: (err: LibUSBException) => void;
 }
 
 /**
@@ -154,7 +179,7 @@ interface Events {
  * Otherwise read the serial number from the device and return a closed device.
  * @param dev USB Device to check
  */
-async function getMotorSerial(dev: usb.Device) {
+async function getMotorSerial(dev: Device) {
   if (!isDeviceMotorDriver(dev)) return false;
 
   // console.log('New Motor Device!');
@@ -162,11 +187,16 @@ async function getMotorSerial(dev: usb.Device) {
   dev.open();
 
   try {
-    const data = await new Promise<Buffer | undefined>((resolve, reject) =>
-      dev.getStringDescriptor(dev.deviceDescriptor.iSerialNumber, (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
-      })
+    // usb@2's getStringDescriptor invokes the callback with `string` (the
+    // descriptor decoded to UTF-16LE), not Buffer.
+    const data = await new Promise<string | undefined>((resolve, reject) =>
+      dev.getStringDescriptor(
+        dev.deviceDescriptor.iSerialNumber,
+        (err, result) => {
+          if (err) reject(err);
+          else resolve(result);
+        }
+      )
     );
 
     if (!data) {
@@ -174,10 +204,7 @@ async function getMotorSerial(dev: usb.Device) {
       dev.close();
       return false;
     }
-    const dataStr = data
-      .toString()
-      .replace(/\0/g, '')
-      .trim();
+    const dataStr = data.replace(/\0/g, '').trim();
 
     // console.log('Found Motor device:', dataStr);
 
@@ -195,11 +222,13 @@ type Options = {
   polling?: number | boolean;
 };
 
-function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | string {
+function parseMLX(
+  mlxResponse: Buffer
+): ReturnType<typeof MLX.parseData> | string {
   try {
     return MLX.parseData(mlxResponse);
   } catch (e) {
-    return e.toString();
+    return String(e);
   }
 }
 
@@ -209,7 +238,8 @@ function parseMLX(mlxResponse: Buffer): ReturnType<typeof MLX.parseData> | strin
  * @param data Raw block of bytes from a motor packet
  */
 export function parseHostDataIN(data: Buffer): ReadData {
-  if (data.length != reportLength) throw new Error('Invalid data. Refusing to parse');
+  if (data.length != reportLength)
+    throw new Error('Invalid data. Refusing to parse');
 
   let i = 0;
   function read(length: number, signed: boolean = false) {
@@ -279,7 +309,7 @@ export function parseHostDataIN(data: Buffer): ReadData {
 }
 
 interface Consumer {
-  attach: (device: usb.Device) => void;
+  attach: (device: Device) => void;
   detach: () => void;
 }
 
@@ -288,18 +318,23 @@ interface Consumer {
  */
 const motors: {
   serial: string;
-  device?: usb.Device;
+  device?: Device;
   consumer?: Consumer;
 }[] = [];
 
-type Listener = (serial: string, device: usb.Device, duplicate: boolean, consumer?: Consumer) => void;
+type Listener = (
+  serial: string,
+  device: Device,
+  duplicate: boolean,
+  consumer?: Consumer
+) => void;
 const listeners: Listener[] = [];
 
 export type WriteError = {
   /**
    * LibUSB Error
    */
-  error: usb.LibUSBException;
+  error: LibUSBException;
   /** Device serial number */
   serial: string;
   /**
@@ -319,7 +354,9 @@ export type WriteError = {
  */
 export async function addAttachListener(listener: Listener) {
   listeners.push(listener);
-  motors.filter(m => m.device).forEach(m => listener(m.serial, m.device!, false, m.consumer));
+  motors
+    .filter((m) => m.device)
+    .forEach((m) => listener(m.serial, m.device!, false, m.consumer));
 
   return () => {
     const index = listeners.indexOf(listener);
@@ -327,33 +364,16 @@ export async function addAttachListener(listener: Listener) {
   };
 }
 
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function retryGetMotorSerial(device: usb.Device): Promise<string> {
-  while (true) {
-    try {
-      const ret = await getMotorSerial(device);
-      if (ret) return ret;
-      console.log('Empty ret!?');
-    } catch (e) {
-      console.log('Error reading serial');
-    }
-    await delay(1000);
-  }
-}
-
 /**
  * Check a USB device
  * @param device USB device instance to check if it is one of us
  */
-async function onDeviceAttach(device: usb.Device) {
+async function onDeviceAttach(device: Device) {
   const serial = await getMotorSerial(device);
 
   if (!serial) return;
 
-  const found = motors.find(d => serial == d.serial);
+  const found = motors.find((d) => serial == d.serial);
   let consumer: Consumer;
   let duplicate = false;
 
@@ -374,7 +394,7 @@ async function onDeviceAttach(device: usb.Device) {
     // Don't do anything
   }
 
-  listeners.forEach(l => l(serial, device, duplicate, consumer));
+  listeners.forEach((l) => l(serial, device, duplicate, consumer));
 }
 
 let started = false;
@@ -392,11 +412,11 @@ export function start(options: { log?: DebugOptions } = {}) {
   started = true;
 
   // When we start, find all devices
-  usb.getDeviceList().forEach(onDeviceAttach);
+  getDeviceList().forEach(onDeviceAttach);
   // And listen for any new devices connected
   usb.on('attach', onDeviceAttach);
 
-  usb.on('detach', dev => {
+  usb.on('detach', (dev) => {
     const found = motors.find(({ device }) => device == dev);
 
     if (found) {
@@ -418,12 +438,15 @@ export default function USBInterface(serial: string, options?: Options) {
 
   options = options || {};
 
-  const polling = (options.polling === undefined || options.polling === true ? 3 : options.polling) || 0;
+  const polling =
+    (options.polling === undefined || options.polling === true
+      ? 3
+      : options.polling) || 0;
 
-  const { info, debug, warning } = DebugFunctions(options.debug);
+  const { info, warning } = DebugFunctions(options.debug);
 
-  let device: usb.Device | undefined;
-  let endpoint: usb.InEndpoint;
+  let device: Device | undefined;
+  let endpoint: InEndpoint;
   const events = new EventEmitter() as TypedEventEmitter<Events>;
 
   let status: 'missing' | 'connected';
@@ -431,10 +454,12 @@ export default function USBInterface(serial: string, options?: Options) {
   // Allocate a write buffer once and keep reusing it
   const writeBuffer = Buffer.alloc(reportLength);
 
-  const found = motors.find(d => serial == d.serial);
+  const found = motors.find((d) => serial == d.serial);
   if (found) {
     if (found.consumer) {
-      throw new Error("Can't have two consumers of the same serial number: " + serial);
+      throw new Error(
+        "Can't have two consumers of the same serial number: " + serial
+      );
     } else {
       found.consumer = { attach, detach };
       if (found.device) attach(found.device);
@@ -443,7 +468,7 @@ export default function USBInterface(serial: string, options?: Options) {
     motors.push({ serial, consumer: { attach, detach } });
   }
 
-  async function attach(dev: usb.Device) {
+  async function attach(dev: Device) {
     info('Attaching', serial);
 
     dev.open();
@@ -453,7 +478,8 @@ export default function USBInterface(serial: string, options?: Options) {
     // Motor HID interface is always interface 0
     const intf = device.interface(0);
 
-    if (process.platform != 'win32' && intf.isKernelDriverActive()) intf.detachKernelDriver();
+    if (process.platform != 'win32' && intf.isKernelDriverActive())
+      intf.detachKernelDriver();
 
     intf.claim();
 
@@ -461,16 +487,16 @@ export default function USBInterface(serial: string, options?: Options) {
     writeBuffer[0] = intf.interfaceNumber;
 
     // Motor HID IN endpoint is always endpoint 0
-    endpoint = intf.endpoints[0] as usb.InEndpoint;
+    endpoint = intf.endpoints[0] as InEndpoint;
 
     if (polling) {
       // Start polling. 3 pending requests at all times
       endpoint.startPoll(polling, reportLength);
 
-      endpoint.on('data', d => events.emit('data', parseHostDataIN(d)));
+      endpoint.on('data', (d) => events.emit('data', parseHostDataIN(d)));
     }
 
-    endpoint.on('error', err => {
+    endpoint.on('error', (err) => {
       if (err.errno == 4) return;
 
       events.emit('error', err);
@@ -551,7 +577,11 @@ export default function USBInterface(serial: string, options?: Options) {
 
     let pos = 1;
     function writeNumberToBuffer(num: number, len = 1, signed = false) {
-      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](Math.round(num), pos, len);
+      pos = writeBuffer[signed ? 'writeIntLE' : 'writeUIntLE'](
+        Math.round(num),
+        pos,
+        len
+      );
     }
 
     try {
@@ -559,7 +589,8 @@ export default function USBInterface(serial: string, options?: Options) {
 
       switch (command.mode) {
         case CommandMode.MLXDebug:
-          if (command.data === undefined) throw new Error('Argument `data` missing');
+          if (command.data === undefined)
+            throw new Error('Argument `data` missing');
           if (!(command.data.length == 7 || command.data.length == 8))
             throw new Error('Argument `data` has incorrect length');
 
@@ -580,21 +611,26 @@ export default function USBInterface(serial: string, options?: Options) {
           break;
 
         case CommandMode.Calibration:
-          if (command.angle === undefined) throw new Error('Argument `angle` missing');
-          if (command.amplitude === undefined) throw new Error('Argument `amplitude` missing');
+          if (command.angle === undefined)
+            throw new Error('Argument `angle` missing');
+          if (command.amplitude === undefined)
+            throw new Error('Argument `amplitude` missing');
 
           writeNumberToBuffer(command.angle, 2);
           writeNumberToBuffer(command.amplitude, 1);
           break;
 
         case CommandMode.Push:
-          if (command.command === undefined) throw new Error('Argument `command` missing');
+          if (command.command === undefined)
+            throw new Error('Argument `command` missing');
           writeNumberToBuffer(command.command, 2, true);
           break;
 
         case CommandMode.Servo:
-          if (command.command === undefined) throw new Error('Argument `command` missing');
-          if (command.pwmMode === undefined) throw new Error('Argument `pwmMode` missing');
+          if (command.command === undefined)
+            throw new Error('Argument `command` missing');
+          if (command.pwmMode === undefined)
+            throw new Error('Argument `pwmMode` missing');
 
           // CommandMode::Servo
           const PWMMode = {
@@ -611,22 +647,24 @@ export default function USBInterface(serial: string, options?: Options) {
           };
 
           writeNumberToBuffer(PWMMode[command.pwmMode]);
-          let skip = false;
           switch (command.pwmMode) {
             case 'kP': // case 11: in USBInterface.cpp, send a Proportional Gain constant
             case 'kI': // case 12:
             case 'kD': // case 13:
               command.command = clipRange(0, 0xffff)(command.command);
-              skip = true;
+              break;
             case 'pwm': // case 1: Set pwm Mode
             case 'command': // case 1: setAmplitude  // this is redundant to pwmMode
-              if (!skip) command.command = clipRange(-255, 255)(command.command);
+              command.command = clipRange(-255, 255)(command.command);
+              break;
             case 'position': // case 2: setPosition
             case 'velocity': // case 3: setVelocity
             case 'spare': // case 4: Set Spare Mode
-              writeNumberToBuffer(command.command, 4, true);
+              // no clipping
               break;
           }
+          writeNumberToBuffer(command.command, 4, true);
+          break;
       }
     } catch (e) {
       e = new TypeError('Failure parsing command' + e);
@@ -636,10 +674,12 @@ export default function USBInterface(serial: string, options?: Options) {
 
     const start = process.hrtime();
     // Send a Set Report control request
-    return new Promise((resolve, reject) =>
+    return new Promise<void>((resolve, reject) =>
       dev.controlTransfer(
         // bmRequestType (constant for this control request)
-        usb.LIBUSB_RECIPIENT_INTERFACE | usb.LIBUSB_REQUEST_TYPE_CLASS | usb.LIBUSB_ENDPOINT_OUT,
+        LIBUSB_RECIPIENT_INTERFACE |
+          LIBUSB_REQUEST_TYPE_CLASS |
+          LIBUSB_ENDPOINT_OUT,
         // bmRequest (constant for this control request)
         0x09,
         // wValue (MSB is report type, LSB is report number)
@@ -648,13 +688,15 @@ export default function USBInterface(serial: string, options?: Options) {
         0,
         // message to be sent
         writeBuffer,
-        error => {
+        (error) => {
           if (error && error.errno != 4) {
             const fullError = {
               error,
               command,
               serial,
-              time: process.hrtime(start).reduce((sec, nano) => sec * 1e9 + nano),
+              time: process
+                .hrtime(start)
+                .reduce((sec, nano) => sec * 1e9 + nano),
             };
             cb && cb(fullError);
             reject(fullError);
@@ -681,7 +723,7 @@ export default function USBInterface(serial: string, options?: Options) {
       events.removeListener('data', handler);
     };
   }
-  function onError(handler: (err: usb.LibUSBException) => void) {
+  function onError(handler: (err: LibUSBException) => void) {
     events.on('error', handler);
     return () => {
       events.removeListener('error', handler);

@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Trusted publishing via npm OIDC. Configure the publisher on npmjs.com
+# (@cinderblock/smooth-control → Settings → Publishing access → Add → GitHub
+# Actions, workflow filename `publish.yml`). Do NOT add `registry-url:` to
+# setup-node — it writes a placeholder authToken that suppresses npm's OIDC
+# exchange.
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Use latest npm (Node 22 ships an old npm without OIDC support)
+        run: npm install -g npm@latest
+
+      - name: Show versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Install libudev-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish to npm
+        run: npm publish --provenance
