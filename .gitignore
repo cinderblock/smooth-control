@@ -1,2 +1,14 @@
-node_modules
+node_modules/
 dist/
+*.tsbuildinfo
+*.tgz
+
+# bun
+bun.lockb
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

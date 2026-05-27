@@ -1,33 +1,62 @@
 {
-  "name": "smooth-control",
+  "name": "@cinderblock/smooth-control",
   "version": "0.0.0",
-  "description": "API for controlling Smooth Control motors (aka Quantum Drive & Hover Drive)",
-  "main": "dist/SmoothControl.js",
-  "types": "dist/SmoothControl.d.ts",
+  "description": "Node.js API for controlling Smooth Control BLDC motors (Quantum Drive & Hover Drive) over USB HID",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/SmoothControl.d.ts",
+      "default": "./dist/SmoothControl.js"
+    }
+  },
   "files": [
-    "dist/utils/clipRange.js",
-    "dist/utils/Debug.js",
-    "dist/utils/Debug.d.ts",
-    "dist/SmoothControl.js",
-    "dist/SmoothControl.d.ts"
+    "dist/",
+    "src/",
+    "!dist/**/*.test.*",
+    "!src/**/*.test.ts"
   ],
-  "repository": "https://github.com/cinderblock/smooth-control.git",
-  "author": "Cameron Tacklind <cameron@tacklind.com> (http://cameron.tacklind.com)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cinderblock/smooth-control.git"
+  },
+  "homepage": "https://github.com/cinderblock/smooth-control#readme",
+  "bugs": {
+    "url": "https://github.com/cinderblock/smooth-control/issues"
+  },
+  "keywords": [
+    "smooth-control",
+    "quantum-drive",
+    "hover-drive",
+    "bldc",
+    "motor",
+    "usb",
+    "hid",
+    "mlx90363"
+  ],
+  "author": "Cameron Tacklind <cameron@tacklind.com> (https://cameron.tacklind.com)",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
-    "prepare": "npm run build"
+    "prepack": "npm run build",
+    "prepare": "test -d dist || npm run build",
+    "test": "npm run build && node --test dist/SmoothControl.test.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
-  "devDependencies": {
-    "@types/node": "^12.7.5",
-    "@types/usb": "^1.5.1",
-    "prettier": "^1.18.2",
-    "tslint": "^5.20.0",
-    "typescript": "^3.6.3"
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "dependencies": {
-    "mlx90363": "https://github.com/cinderblock/node-mlx90363.git",
-    "typed-emitter": "^0.1.0",
-    "usb": "^1.8.0"
+    "@cinderblock/mlx90363": "github:cinderblock/node-MLX90363",
+    "usb": "^2.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
   }
 }
