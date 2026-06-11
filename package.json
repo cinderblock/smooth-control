@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "@cinderblock/mlx90363": "github:cinderblock/node-MLX90363",
-    "usb": "^2.17.0"
+    "usb": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
