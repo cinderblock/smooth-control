@@ -55,8 +55,8 @@
     "usb": "^2.17.0"
   },
   "devDependencies": {
-    "@types/node": "^22.19.19",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.3"
+    "@types/node": "^22.19.21",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3"
   }
 }
